@@ -2,8 +2,7 @@
 #include <vector>
 #include <cmath>
 #include <sksat/math/vector.hpp>
-
-using Float = double;
+#include "common.hpp"
 
 namespace simulation {
 	size_t time_step = 0;
@@ -14,22 +13,16 @@ namespace simulation {
 
 	size_t output_interval = 20;
 
-	void init();
 	void main_loop();
 }
 
 int main(int argc, char **argv){
 	std::cout<<" *** START SIMULATION *** "<<std::endl;
 
-	simulation::init();
 	simulation::main_loop();
 
 	std::cout<<" ***  END SIMULATION  *** "<<std::endl;
 	return 0;
-}
-
-void simulation::init(){
-
 }
 
 void simulation::main_loop(){
