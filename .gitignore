@@ -1,4 +1,6 @@
 liquid-rw
+__pycache__/
+secret.py
 
 # Prerequisites
 *.d
