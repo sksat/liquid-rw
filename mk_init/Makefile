@@ -8,5 +8,11 @@ LDFLAGS	= -lm
 %.o:%.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+all:
+	make $(TARGET)
+
+run:$(TARGET)
+	./$<
+
 $(TARGET):$(OBJS)
 	$(CXX) -o $@ $^ $(LDFLAGS)

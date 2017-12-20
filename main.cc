@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <string>
 #include <sstream>
 #include <vector>
 #include <iomanip>
@@ -11,6 +12,7 @@ namespace simulation {
 	size_t time_step = 0;
 	Float time=.0, dt=0.001, finish_time=2.0;
 
+	size_t dim=2;
 	size_t particle_number=0;
 	std::vector< sksat::math::vector<Float> > acc, vel, pos;
 
@@ -18,31 +20,72 @@ namespace simulation {
 	size_t file_number = 0;
 
 	void main_loop();
+	void load_file(const std::string &fname);
 	void write_file(const size_t &step, const Float &time);
 }
 
+int usage(const char *s){
+	std::cout << "> "<< s << " input_file" << std::endl;
+	return -1;
+}
+
 int main(int argc, char **argv){
+	if(argc != 2)
+		return usage(argv[0]);
+
+	simulation::load_file(argv[1]);
+
 	std::cout<<" *** START SIMULATION *** "<<std::endl;
-
 	simulation::main_loop();
-
 	std::cout<<" ***  END SIMULATION  *** "<<std::endl;
 	return 0;
 }
 
+#define PRINT(v) {std::cout<< #v <<": "<<v<<std::endl;}
+
+void simulation::load_file(const std::string &fname){
+	std::cout<<"loading file \""<<fname<<"\"..."<<std::endl;
+	std::ifstream f(fname);
+	f >> time_step
+		>> time
+		>> dim
+		>> rw::r_in >> rw::r_out >> rw::w
+		>> particle_number;
+
+	PRINT(time_step);
+	PRINT(time);
+	PRINT(dim);
+	PRINT(rw::r_in);
+	PRINT(rw::r_out);
+	PRINT(rw::w);
+	PRINT(particle_number);
+
+	acc.reserve(particle_number);
+	vel.reserve(particle_number);
+	pos.reserve(particle_number);
+	for(auto i=0;i<particle_number;i++){
+		f >> pos[i].x
+			>> pos[i].y
+			>> vel[i].x
+			>> vel[i].y;
+	}
+}
+
 void simulation::main_loop(){
+	if(time_step == 0)
+		write_file(0, time);
 	while(true){
-		time_step++;
-		time += dt;
 		if( (time_step % output_interval) == 0 ){
 			std::cout
-				<< "time step: " << time_step << "  "
+				<< "time step: " << std::setw(5) << time_step << "  "
 				<< "time: " << std::setw(5) << time << "  "
 				<< "particle number: " << particle_number
 				<< std::endl;
 			write_file(time_step, time);
 		}
 		if(time >= finish_time) break;
+		time_step++;
+		time += dt;
 	}
 }
 
@@ -61,14 +104,13 @@ void simulation::write_file(const size_t &step, const Float &time){
 	f << time_step << endl
 		<< time << endl
 		<< particle_number << endl
-		<< rw::r_in << "," << rw::r_out << rw::w << endl;
+		<< rw::r_in << " " << rw::r_out << " " << rw::w << endl;
 
 	for(auto i=0;i<particle_number;i++){
-		f << pos[i].x
-			<< pos[i].y
-			<< vel[i].x
-			<< vel[i].y
-			<< endl;
+		f << pos[i].x << " "
+			<< pos[i].y << " "
+			<< vel[i].x << " "
+			<< vel[i].y << endl;
 	}
 
 	file_number++;

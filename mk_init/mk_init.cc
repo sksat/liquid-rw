@@ -37,9 +37,10 @@ void write_data(){
 	using namespace rw;
 	using std::endl;
 	std::ofstream f(fname);
+	f<<0<<" "<<0.0<<endl;
 	f<<dim<<endl;
-	f<<r_in<<","<<rw::r_out<<endl;
-	f<<rw::w;
+	f<<r_in<<" "<<rw::r_out<<endl;
+	f<<rw::w<<endl;
 
 	auto width = r_out - r_in;
 	auto xmax = r_out+width;
@@ -72,11 +73,14 @@ void write_data(){
 			v.push_back(p);
 		}
 	}
+
 	std::cout<<"number of particles: "<<v.size()<<std::endl;
+	f << v.size() << endl;
+
 	for(auto it = v.begin();it!=v.end();it++){
 		if(it->type == WALL) continue;
-		f << it->type << ","
-			<< it->x << ","
+		f << it->type << " "
+			<< it->x << " "
 			<< it->y << std::endl;
 	}
 }
