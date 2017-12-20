@@ -21,9 +21,14 @@ namespace simulation {
 	size_t file_number = 0;
 
 	void main_loop();
+	void move_rigid();
 	void move_body();
 	void load_file(const std::string &fname);
 	void write_file(const size_t &step, const Float &time);
+}
+
+namespace rigid {
+	Float w;
 }
 
 int usage(const char *s){
@@ -36,6 +41,9 @@ int main(int argc, char **argv){
 		return usage(argv[0]);
 
 	simulation::load_file(argv[1]);
+
+	std::cout<<"rigid w: ";
+	std::cin>>rigid::w;
 
 	std::cout<<" *** START SIMULATION *** "<<std::endl;
 	simulation::main_loop();
@@ -86,6 +94,7 @@ void simulation::main_loop(){
 	if(time_step == 0)
 		write_file(0, time);
 	while(true){
+		move_rigid();
 		move_body();
 
 		time_step++;
@@ -99,6 +108,18 @@ void simulation::main_loop(){
 			write_file(time_step, time);
 		}
 		if(time >= finish_time) break;
+	}
+}
+
+void simulation::move_rigid(){
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] != FLUID) continue;
+		auto s = sin(rigid::w * dt);
+		auto c = cos(rigid::w * dt);
+		auto x = (pos[i].x * c) - (pos[i].y * s);
+		auto y = (pos[i].x * s) + (pos[i].y * c);
+		pos[i].x = x;
+		pos[i].y = y;
 	}
 }
 
