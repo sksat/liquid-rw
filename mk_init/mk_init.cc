@@ -6,13 +6,6 @@
 const char fname[] = "init.prof";
 int dim = 2;
 
-enum Type {
-	GHOST,
-	FLUID,
-	WALL,
-	DUMMY
-};
-
 struct Particle {
 	Float x,y;
 	Type type;

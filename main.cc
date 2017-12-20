@@ -21,6 +21,7 @@ namespace simulation {
 	size_t file_number = 0;
 
 	void main_loop();
+	void move_body();
 	void load_file(const std::string &fname);
 	void write_file(const size_t &step, const Float &time);
 }
@@ -75,8 +76,8 @@ void simulation::load_file(const std::string &fname){
 //		std::cout<<type[i]<<" "<<pos[i].x<<" "<<pos[i].y<<" "<<std::endl;
 //		getchar();
 		if(f.eof()){
-			std::cout<<"stop: "<<i<<std::endl;
-			break;
+			std::cerr<<"stop: "<<i<<std::endl;
+			throw std::runtime_error("");
 		}
 	}
 }
@@ -85,6 +86,10 @@ void simulation::main_loop(){
 	if(time_step == 0)
 		write_file(0, time);
 	while(true){
+		move_body();
+
+		time_step++;
+		time += dt;
 		if( (time_step % output_interval) == 0 ){
 			std::cout
 				<< "time step: " << std::setw(5) << time_step << "  "
@@ -94,8 +99,18 @@ void simulation::main_loop(){
 			write_file(time_step, time);
 		}
 		if(time >= finish_time) break;
-		time_step++;
-		time += dt;
+	}
+}
+
+void simulation::move_body(){
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] != WALL) continue;
+		auto s = sin(rw::w * dt);
+		auto c = cos(rw::w * dt);
+		auto x = (pos[i].x * c) - (pos[i].y * s);
+		auto y = (pos[i].x * s) + (pos[i].y * c);
+		pos[i].x = x;
+		pos[i].y = y;
 	}
 }
 
