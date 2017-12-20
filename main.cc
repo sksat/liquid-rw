@@ -15,6 +15,7 @@ namespace simulation {
 	size_t dim=2;
 	size_t particle_number=0;
 	std::vector< sksat::math::vector<Float> > acc, vel, pos;
+	std::vector<int> type;
 
 	size_t output_interval = 20;
 	size_t file_number = 0;
@@ -63,11 +64,20 @@ void simulation::load_file(const std::string &fname){
 	acc.reserve(particle_number);
 	vel.reserve(particle_number);
 	pos.reserve(particle_number);
+	type.reserve(particle_number);
+
 	for(auto i=0;i<particle_number;i++){
-		f >> pos[i].x
+		f >> type[i]
+			>> pos[i].x
 			>> pos[i].y
 			>> vel[i].x
 			>> vel[i].y;
+//		std::cout<<type[i]<<" "<<pos[i].x<<" "<<pos[i].y<<" "<<std::endl;
+//		getchar();
+		if(f.eof()){
+			std::cout<<"stop: "<<i<<std::endl;
+			break;
+		}
 	}
 }
 
@@ -107,7 +117,8 @@ void simulation::write_file(const size_t &step, const Float &time){
 		<< rw::r_in << " " << rw::r_out << " " << rw::w << endl;
 
 	for(auto i=0;i<particle_number;i++){
-		f << pos[i].x << " "
+		f << type[i] << " "
+			<< pos[i].x << " "
 			<< pos[i].y << " "
 			<< vel[i].x << " "
 			<< vel[i].y << endl;

@@ -39,8 +39,7 @@ void write_data(){
 	std::ofstream f(fname);
 	f<<0<<" "<<0.0<<endl;
 	f<<dim<<endl;
-	f<<r_in<<" "<<rw::r_out<<endl;
-	f<<rw::w<<endl;
+	f<<r_in<<" "<<rw::r_out<<" "<<rw::w<<endl;
 
 	auto width = r_out - r_in;
 	auto xmax = r_out+width;
@@ -78,10 +77,12 @@ void write_data(){
 	f << v.size() << endl;
 
 	for(auto it = v.begin();it!=v.end();it++){
-		if(it->type == WALL) continue;
+//		if(it->type == WALL) continue;
 		f << it->type << " "
 			<< it->x << " "
-			<< it->y << std::endl;
+			<< it->y << " "
+			<< 0.0 << " "
+			<< 0.0 << endl;
 	}
 }
 
