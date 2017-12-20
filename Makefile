@@ -32,4 +32,4 @@ $(INIT):$(INIT_DIR)/mk_init.cc
 	make -C $(INIT_DIR) run
 
 $(GIF):$(PROF_0)
-	./plot.py
+	gnuplot plot.gp
