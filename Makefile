@@ -29,7 +29,9 @@ gifup:$(GIF)
 	./upload.py $(GIF)
 
 autorun:
-	make run
+	make run > log.txt
+	./upload.py log.txt
+	rm log.txt
 	make gifup
 
 $(TARGET):$(OBJS)
