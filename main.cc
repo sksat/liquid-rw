@@ -52,7 +52,8 @@ void simulation::load_file(const std::string &fname){
 	f >> time_step
 		>> time
 		>> dim
-		>> rw::r_in >> rw::r_out >> rw::w
+		>> rw::r_in >> rw::r_out
+		>> rw::theta >> rw::w
 		>> particle_number;
 
 	PRINT(time_step);
@@ -60,6 +61,7 @@ void simulation::load_file(const std::string &fname){
 	PRINT(dim);
 	PRINT(rw::r_in);
 	PRINT(rw::r_out);
+	PRINT(rw::theta);
 	PRINT(rw::w);
 	PRINT(particle_number);
 
@@ -115,10 +117,12 @@ void simulation::move_particle(){
 void simulation::move_body(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != WALL) continue;
-		auto s = sin(rw::w * dt);
-		auto c = cos(rw::w * dt);
+		auto dtheta = rw::w *dt;
+		auto s = sin(dtheta);
+		auto c = cos(dtheta);
 		auto x = (pos[i].x * c) - (pos[i].y * s);
 		auto y = (pos[i].x * s) + (pos[i].y * c);
+		rw::theta += dtheta;
 		pos[i].x = x;
 		pos[i].y = y;
 	}
@@ -139,7 +143,8 @@ void simulation::write_file(const size_t &step, const Float &time){
 	f << time_step << endl
 		<< time << endl
 		<< particle_number << endl
-		<< rw::r_in << " " << rw::r_out << " " << rw::w << endl;
+		<< rw::r_in << " " << rw::r_out << endl
+		<< rw::theta << " " << rw::w << endl;
 
 	for(auto i=0;i<particle_number;i++){
 		f << type[i] << " "

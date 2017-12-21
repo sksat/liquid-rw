@@ -30,9 +30,10 @@ void write_data(){
 	using namespace rw;
 	using std::endl;
 	std::ofstream f(fname);
-	f<<0<<" "<<0.0<<endl;
-	f<<dim<<endl;
-	f<<r_in<<" "<<rw::r_out<<" "<<rw::w<<endl;
+	f << 0 << " " << 0.0 << endl
+		<< dim << endl
+		<< r_in << " " << rw::r_out << endl
+		<< theta <<" "<<rw::w<<endl;
 
 	auto width = r_out - r_in;
 	auto xmax = r_out+width;

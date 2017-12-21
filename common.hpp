@@ -11,5 +11,5 @@ enum Type {
 
 namespace rw {
 	Float r_in, r_out;
-	Float w;
+	Float theta, w;
 }
