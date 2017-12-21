@@ -21,6 +21,7 @@ namespace simulation {
 	size_t file_number = 0;
 
 	void main_loop();
+	void move_particle();
 	void move_body();
 	void load_file(const std::string &fname);
 	void write_file(const size_t &step, const Float &time);
@@ -73,8 +74,6 @@ void simulation::load_file(const std::string &fname){
 			>> pos[i].y
 			>> vel[i].x
 			>> vel[i].y;
-//		std::cout<<type[i]<<" "<<pos[i].x<<" "<<pos[i].y<<" "<<std::endl;
-//		getchar();
 		if(f.eof()){
 			std::cerr<<"stop: "<<i<<std::endl;
 			throw std::runtime_error("");
@@ -86,6 +85,7 @@ void simulation::main_loop(){
 	if(time_step == 0)
 		write_file(0, time);
 	while(true){
+		move_particle();
 		move_body();
 
 		time_step++;
@@ -99,6 +99,16 @@ void simulation::main_loop(){
 			write_file(time_step, time);
 		}
 		if(time >= finish_time) break;
+	}
+}
+
+void simulation::move_particle(){
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] != FLUID) continue;
+		vel[i].x += acc[i].x;
+		vel[i].y += acc[i].y;
+		pos[i].x += vel[i].x;
+		pos[i].y += vel[i].y;
 	}
 }
 

@@ -17,6 +17,9 @@ CXXFLAGS= -std=c++14
 all:
 	make $(TARGET)
 
+init:
+	rm $(INIT)
+	make $(INIT)
 run:$(TARGET) $(INIT)
 	./$(TARGET) $(INIT)
 
@@ -24,6 +27,10 @@ gif:$(GIF)
 
 gifup:$(GIF)
 	./upload.py $(GIF)
+
+autorun:
+	make run
+	make gifup
 
 $(TARGET):$(OBJS)
 	$(CXX) -o $@ $^
