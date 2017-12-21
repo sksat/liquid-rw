@@ -9,7 +9,7 @@ GIF	= $(OUT_DIR)/out.gif
 
 CC	= gcc
 CXX	= g++
-CXXFLAGS= -std=c++14
+CXXFLAGS= -std=c++14 -g
 
 %.o : %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
