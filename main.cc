@@ -24,14 +24,17 @@ namespace simulation {
 	const Float dst_lmt_rat	= 0.9;		// これ以上の粒子間の接近を許さない距離の係数
 	const Float col_rat	= 0.2;		// 接近した粒子の反発率
 	const Float col		= 1.0 + col_rat;
+	const Float sound_vel	= 22.0;		// 流体の音速(?)
 
 	size_t particle_number=0;
 	std::vector< sksat::math::vector<Float> > acc, vel, pos;
+	std::vector<Float> press;
 	std::vector<int> type;
 	sksat::math::vector<Float> min, max;
 
 	Float r, r2;			// 影響半径
 	Float A1;			// 粘性項の計算に用いる係数
+	Float A2;			// 圧力の計算に用いる係数
 	Float n0;			// 初期粒子数密度
 	Float lmd;			// ラプラシアンモデルの係数λ
 	Float dens[NUM_TYPE];		// 粒子種類ごとの密度
@@ -57,6 +60,7 @@ namespace simulation {
 	void check_overflow(size_t i);
 	void move_particle_tmp();
 	void check_collision();
+	void make_pressure();
 	void move_body();
 
 	void load_file(const std::string &fname);
@@ -115,6 +119,7 @@ void simulation::load_file(const std::string &fname){
 	acc.reserve(particle_number);
 	vel.reserve(particle_number);
 	pos.reserve(particle_number);
+	press.reserve(particle_number);
 	type.reserve(particle_number);
 
 	for(auto i=0;i<particle_number;i++){
@@ -122,7 +127,8 @@ void simulation::load_file(const std::string &fname){
 			>> pos[i].x
 			>> pos[i].y
 			>> vel[i].x
-			>> vel[i].y;
+			>> vel[i].y
+			>> press[i];
 		if(f.eof()){
 			std::cerr<<"stop: "<<i<<std::endl;
 			throw std::runtime_error("");
@@ -183,6 +189,8 @@ void simulation::set_param(){
 	n0	= tn0;
 	lmd	= tlmd / tn0;
 	A1 = 2.0 * knm_vsc * dim / n0 / lmd;
+	A2 = sound_vel * sound_vel / n0;
+
 	dens[FLUID]	= dens_fluid;
 	dens[WALL]	= dens_wall;
 	dens_inv[FLUID]	= 1.0/dens_fluid;
@@ -201,6 +209,7 @@ void simulation::main_loop(){
 		calc_tmpacc();
 		move_particle_tmp(); // temporary
 		check_collision();
+		make_pressure();
 
 		move_body();
 
@@ -335,6 +344,39 @@ void simulation::check_collision(){
 	}
 }
 
+void simulation::make_pressure(){
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] == GHOST) continue;
+		Float ni = 0.0;
+		int ix = static_cast<int>(pos[i].x - min.x) + 1;
+		int iy = static_cast<int>(pos[i].y - min.y) + 1;
+		for(int jy=iy-1;jy<=iy+1;jy++){
+			for(int jx=ix-1;jx<=ix+1;jx++){
+				int jb = jy * bucket::nx + ix;
+				int j = bucket::first[jb];
+				if(j == -1) continue;
+				for(;;){
+					Float v0 = pos[j].x - pos[i].x;
+					Float v1 = pos[j].y - pos[i].y;
+					Float dist2 = v0*v0 + v1*v1;
+					if(dist2 < r2){
+						if(j!=i && type[j]!=GHOST){
+							Float dist = sqrt(dist2);
+							Float w = weight(dist, r);
+							ni += w;
+						}
+					}
+					j = bucket::next[j];
+					if(j == -1) break;
+				}
+			}
+		}
+		Float mi = dens[type[i]];
+		Float pressure = (ni > n0) * (ni - n0) * A2 * mi;
+		press[i] = pressure;
+	}
+}
+
 void simulation::move_body(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != WALL) continue;
@@ -373,7 +415,8 @@ void simulation::write_file(const size_t &step, const Float &time){
 			<< pos[i].x << " "
 			<< pos[i].y << " "
 			<< vel[i].x << " "
-			<< vel[i].y << endl;
+			<< vel[i].y << " "
+			<< press[i] << endl;
 	}
 
 	file_number++;
