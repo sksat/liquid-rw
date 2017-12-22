@@ -16,7 +16,7 @@ namespace simulation {
 	size_t dim=2;
 
 	// 定数たち
-	const Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
+	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
 	const Float crt_num	= 0.1;		// クーラン条件数
 	const Float knm_vsc	= 0.000001;	// 動粘性係数
 	const Float dens_fluid	= 1000;		// 液体粒子の密度
@@ -119,6 +119,9 @@ void simulation::load_file(const std::string &fname){
 	PRINT(rw::w);
 	PRINT(particle_number);
 
+	pcl_dst = ((rw::r_out-rw::r_in)+rw::r_out)/50;
+	PRINT(pcl_dst);
+
 	acc.reserve(particle_number);
 	vel.reserve(particle_number);
 	pos.reserve(particle_number);
@@ -211,6 +214,12 @@ void simulation::main_loop(){
 		make_bucket();
 
 		calc_tmpacc();
+		for(auto i=0;i<particle_number;i++){
+			if(-rw::r_out/100 < pos[i].y && pos[i].y < rw::r_out/100){
+				if(pos[i].x > 0.0)
+					vel[i].y = 0.001;
+			}
+		}
 		move_particle_tmp(); // temporary
 		check_collision();
 		make_press();
@@ -236,7 +245,7 @@ void simulation::main_loop(){
 
 void simulation::make_bucket(){
 	using namespace bucket;
-	for(int i=0;i<nxy;i++){ first[i] = -1; last[i] = -1; }
+	for(int i=0;i<nxy*4;i++){ first[i] = -1; last[i] = -1; }
 	for(int i=0;i<particle_number;i++){ next[i] = -1; }
 	for(int i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
@@ -254,7 +263,7 @@ void simulation::calc_tmpacc(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
-//		Acc.x = Acc.y = 0.1;
+		Acc.x = Acc.y = 0.0;
 		int ix = static_cast<int>((pos[i].x - min.x) * bucket::width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y) * bucket::width_inv) + 1;
 		for(int jy=iy-1;jy<=iy+1;jy++){
@@ -288,6 +297,7 @@ void simulation::calc_tmpacc(){
 			}
 		}
 		acc[i] = Acc * A1;
+		acc[i].y += -9.8;
 	}
 }
 
@@ -297,7 +307,7 @@ void simulation::check_overflow(size_t i){
 		pos[i].y > max.y || pos[i].y < min.y
 	  ){
 		type[i] = GHOST;
-		vel[i].x = vel[i].y = 0.0;
+		press[i] = vel[i].x = vel[i].y = 0.0;
 	}
 }
 
@@ -354,6 +364,11 @@ void simulation::check_collision(){
 void simulation::make_press(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
+//		if(-0.1 < pos[i].y && pos[i].y < 0.1){
+//			press[i] = 100.0;
+//			std::cout<<"a:"; getchar();
+//			continue;
+//		}
 		Float ni = 0.0;
 		int ix = static_cast<int>((pos[i].x - min.x)*bucket::width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y)*bucket::width_inv) + 1;
@@ -381,6 +396,7 @@ void simulation::make_press(){
 		Float mi = dens[type[i]];
 		Float pressure = (ni > n0) * (ni - n0) * A2 * mi;
 		press[i] = pressure;
+//		if(pressure != 0.0) PRINT(pressure);
 	}
 }
 
