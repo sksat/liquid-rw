@@ -21,6 +21,7 @@ init:
 	rm $(INIT)
 	make $(INIT)
 run:$(TARGET) $(INIT)
+	make clean_out
 	./$(TARGET) $(INIT)
 
 gif:$(GIF)
@@ -33,6 +34,13 @@ autorun:
 	./upload.py log.txt
 	rm log.txt
 	make gifup
+
+clean:
+	rm -f *.o
+	rm -f $(TARGET)
+
+clean_out:
+	rm $(OUT_DIR)/*
 
 $(TARGET):$(OBJS)
 	$(CXX) -o $@ $^
