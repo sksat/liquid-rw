@@ -19,16 +19,24 @@ namespace simulation {
 	const Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
 	const Float crt_num	= 0.1;		// クーラン条件数
 	const Float knm_vsc	= 0.000001;	// 動粘性係数
+	const Float dens_fluid	= 1000;		// 液体粒子の密度
+	const Float dens_wall	= 1000;		// 壁粒子の密度
+	const Float dst_lmt_rat	= 0.9;		// これ以上の粒子間の接近を許さない距離の係数
+	const Float col_rat	= 0.2;		// 接近した粒子の反発率
+	const Float col		= 1.0 + col_rat;
 
 	size_t particle_number=0;
 	std::vector< sksat::math::vector<Float> > acc, vel, pos;
 	std::vector<int> type;
 	sksat::math::vector<Float> min, max;
 
-	Float r, r2;	// 影響半径
-	Float A1;	// 粘性項の計算に用いる係数
-	Float n0;	// 初期粒子数密度
-	Float lmd;	// ラプラシアンモデルの係数λ
+	Float r, r2;			// 影響半径
+	Float A1;			// 粘性項の計算に用いる係数
+	Float n0;			// 初期粒子数密度
+	Float lmd;			// ラプラシアンモデルの係数λ
+	Float dens[NUM_TYPE];		// 粒子種類ごとの密度
+	Float dens_inv[NUM_TYPE];
+	Float rlim, rlim2;		// これ以上の粒子間の接近を許さない距離
 
 	namespace bucket {
 		Float width, width2, width_inv;
@@ -47,7 +55,8 @@ namespace simulation {
 	void make_bucket();
 	void calc_tmpacc();
 	void check_overflow(size_t i);
-	void move_particle();
+	void move_particle_tmp();
+	void check_collision();
 	void move_body();
 
 	void load_file(const std::string &fname);
@@ -174,6 +183,13 @@ void simulation::set_param(){
 	n0	= tn0;
 	lmd	= tlmd / tn0;
 	A1 = 2.0 * knm_vsc * dim / n0 / lmd;
+	dens[FLUID]	= dens_fluid;
+	dens[WALL]	= dens_wall;
+	dens_inv[FLUID]	= 1.0/dens_fluid;
+	dens_inv[WALL]	= 1.0/dens_wall;
+
+	rlim	= pcl_dst * dst_lmt_rat;
+	rlim2	= rlim * rlim;
 }
 
 void simulation::main_loop(){
@@ -182,9 +198,10 @@ void simulation::main_loop(){
 	while(true){
 		make_bucket();
 
-		calc_tmpacc(); // VscTrm()
+		calc_tmpacc();
+		move_particle_tmp(); // temporary
+		check_collision();
 
-		move_particle();
 		move_body();
 
 		time_step++;
@@ -268,7 +285,7 @@ void simulation::check_overflow(size_t i){
 	}
 }
 
-void simulation::move_particle(){
+void simulation::move_particle_tmp(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		vel[i].x += acc[i].x;
@@ -276,6 +293,45 @@ void simulation::move_particle(){
 		pos[i].x += vel[i].x;
 		pos[i].y += vel[i].y;
 		check_overflow(i);
+	}
+}
+
+void simulation::check_collision(){
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] != FLUID) continue;
+		Float mi = dens[type[i]];
+		sksat::math::vector<Float> vec_i = vel[i], vec_i2 = vel[i];
+		int ix = static_cast<int>((pos[i].x - min.x) * bucket::width_inv) + 1;
+		int iy = static_cast<int>((pos[i].y - min.y) * bucket::width_inv) + 1;
+		for(int jy=iy-1; jy<=iy+1; jy++){
+			for(int jx=ix-1; jx<=ix+1; jx++){
+				int jb = jy * bucket::nx + ix;
+				int j = bucket::first[jb];
+				if(j == -1) continue;
+				for(;;){
+					Float v0 = pos[j].x - pos[i].x;
+					Float v1 = pos[j].y - pos[i].y;
+					Float dist2 = v0*v0 + v1*v1;
+					if(dist2 < rlim2){
+						if(j!=i && type[i]!= GHOST){
+							Float fDT = (vec_i.x-vel[j].x)*v0+(vec_i.y-vel[j].y)*v1;
+							if(fDT > 0.0){
+								Float mj = dens[type[j]];
+								fDT *= col * mj / (mi+mj) / dist2;
+								vec_i2.x -= v0 * fDT;
+								vec_i2.y -= v1 * fDT;
+							}
+						}
+					}
+					j = bucket::next[j]; // バケット内の次の粒子へ
+					if(j == -1) break;
+				}
+			}
+		}
+		acc[i] = vec_i2;
+	}
+	for(auto i=0;i<particle_number;i++){
+		vel[i] = acc[i];
 	}
 }
 

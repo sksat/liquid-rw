@@ -6,7 +6,8 @@ enum Type {
         GHOST,
         FLUID,
         WALL,
-        DUMMY
+        DUMMY,
+	NUM_TYPE
 };
 
 namespace rw {
