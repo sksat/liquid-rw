@@ -35,6 +35,7 @@ namespace simulation {
 	Float r, r2;			// 影響半径
 	Float A1;			// 粘性項の計算に用いる係数
 	Float A2;			// 圧力の計算に用いる係数
+	Float A3;			// 圧力勾配項の計算に用いる係数
 	Float n0;			// 初期粒子数密度
 	Float lmd;			// ラプラシアンモデルの係数λ
 	Float dens[NUM_TYPE];		// 粒子種類ごとの密度
@@ -60,7 +61,9 @@ namespace simulation {
 	void check_overflow(size_t i);
 	void move_particle_tmp();
 	void check_collision();
-	void make_pressure();
+	void make_press();
+	void calc_press_grad(); // 圧力勾配項
+	void move_particle();
 	void move_body();
 
 	void load_file(const std::string &fname);
@@ -190,6 +193,7 @@ void simulation::set_param(){
 	lmd	= tlmd / tn0;
 	A1 = 2.0 * knm_vsc * dim / n0 / lmd;
 	A2 = sound_vel * sound_vel / n0;
+	A3 = -1 * dim / n0;
 
 	dens[FLUID]	= dens_fluid;
 	dens[WALL]	= dens_wall;
@@ -209,7 +213,10 @@ void simulation::main_loop(){
 		calc_tmpacc();
 		move_particle_tmp(); // temporary
 		check_collision();
-		make_pressure();
+		make_press();
+		calc_press_grad();
+		move_particle();
+		make_press();
 
 		move_body();
 
@@ -344,12 +351,12 @@ void simulation::check_collision(){
 	}
 }
 
-void simulation::make_pressure(){
+void simulation::make_press(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
 		Float ni = 0.0;
-		int ix = static_cast<int>(pos[i].x - min.x) + 1;
-		int iy = static_cast<int>(pos[i].y - min.y) + 1;
+		int ix = static_cast<int>((pos[i].x - min.x)*bucket::width_inv) + 1;
+		int iy = static_cast<int>((pos[i].y - min.y)*bucket::width_inv) + 1;
 		for(int jy=iy-1;jy<=iy+1;jy++){
 			for(int jx=ix-1;jx<=ix+1;jx++){
 				int jb = jy * bucket::nx + ix;
@@ -374,6 +381,70 @@ void simulation::make_pressure(){
 		Float mi = dens[type[i]];
 		Float pressure = (ni > n0) * (ni - n0) * A2 * mi;
 		press[i] = pressure;
+	}
+}
+
+void simulation::calc_press_grad(){
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] != FLUID) continue;
+		sksat::math::vector<Float> Acc;
+		Acc.x = Acc.y = Acc.z = 0.0;
+		Float pre_min = press[i];
+		int ix = static_cast<int>((pos[i].x - min.x)*bucket::width_inv) + 1;
+		int iy = static_cast<int>((pos[i].y - min.y)*bucket::width_inv) + 1;
+		for(int jy=iy-1;jy<=iy+1;jy++){
+			for(int jx=ix-1;jx<=ix+1;jx++){
+				int jb = jy*bucket::nx + jx;
+				int j = bucket::first[jb];
+				if(j == -1) continue;
+				for(;;){
+					Float v0 = pos[j].x - pos[i].x;
+					Float v1 = pos[j].y - pos[i].y;
+					Float dist2 = v0*v0 + v1*v1;
+					if(dist2 < r2){
+						if(j!=i && type[j]!=GHOST){
+							if(pre_min > press[j]) pre_min = press[j];
+						}
+					}
+					j = bucket::next[j];
+					if(j == -1) break;
+				}
+			}
+		}
+		for(int jy=iy-1;jy<=iy+1;jy++){
+			for(int jx=ix-1;jx<=ix+1;jx++){
+				int jb = jy * bucket::nx + jx;
+				int j = bucket::first[jb];
+				if(j == -1) continue;
+				for(;;){
+					Float v0 = pos[j].x - pos[i].x;
+					Float v1 = pos[j].y - pos[i].y;
+					Float dist2 = v0*v0 + v1*v1;
+					if(dist2 < r2){
+						if(j!=i && type[j]!=GHOST){
+							Float dist = sqrt(dist2);
+							Float w = weight(dist, r);
+							w *= (press[j] - pre_min)/dist2;
+							Acc.x += v0*w;
+							Acc.y += v1*w;
+						}
+					}
+					j = bucket::next[j];
+					if(j == -1) break;
+				}
+			}
+		}
+		acc[i] = Acc * dens_inv[FLUID] * A3;
+	}
+}
+
+void simulation::move_particle(){
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] != FLUID) continue;
+		vel[i] += acc[i] * dt;
+		pos[i] += acc[i] * dt * dt;
+		acc[i].x = acc[i].y = acc[i].z = 0.0;
+		check_overflow(i);
 	}
 }
 
