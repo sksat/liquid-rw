@@ -38,8 +38,10 @@ void write_data(){
 	auto width = r_out - r_in;
 	auto xmax = r_out+width;
 	auto ymax = r_out+width;
-	auto dx = xmax / 50;
-	auto dy = ymax / 50;
+	auto dx = xmax / NUM_PER_DST;
+	auto dy = ymax / NUM_PER_DST;
+
+	std::cout<<"dx: "<<dx<<" dy: "<<dy<<std::endl;
 
 	std::vector<Particle> v;
 
@@ -51,12 +53,12 @@ void write_data(){
 				if(r2 > (r_out+width)*(r_out+width))
 					continue;
 				p.type = WALL;
-			}else if(r2 > r_in*r_in){
+			}else if(r2 > (r_in+1)*(r_in+1)){
 				p.type = FLUID;
 			}else if(width >= r_in){
 				p.type = WALL;
 			}else{
-				if(r2 > (r_in-width)*(r_in-width))
+				if(r2 > (r_in-width-1)*(r_in-width-1))
 					p.type = WALL;
 				else
 					continue;

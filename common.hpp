@@ -14,3 +14,5 @@ namespace rw {
 	Float r_in, r_out;
 	Float theta, w;
 }
+
+const int NUM_PER_DST = 50;

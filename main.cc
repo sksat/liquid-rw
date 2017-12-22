@@ -119,7 +119,7 @@ void simulation::load_file(const std::string &fname){
 	PRINT(rw::w);
 	PRINT(particle_number);
 
-	pcl_dst = ((rw::r_out-rw::r_in)+rw::r_out)/50;
+	pcl_dst = ((rw::r_out-rw::r_in)+rw::r_out)/static_cast<Float>(NUM_PER_DST);
 	PRINT(pcl_dst);
 
 	acc.reserve(particle_number);
@@ -216,8 +216,8 @@ void simulation::main_loop(){
 		calc_tmpacc();
 		for(auto i=0;i<particle_number;i++){
 			if(-rw::r_out/100 < pos[i].y && pos[i].y < rw::r_out/100){
-				if(pos[i].x > 0.0)
-					vel[i].y = 0.001;
+//				if(pos[i].x > 0.0)
+//					vel[i].y = 0.001;
 			}
 		}
 		move_particle_tmp(); // temporary
@@ -297,7 +297,7 @@ void simulation::calc_tmpacc(){
 			}
 		}
 		acc[i] = Acc * A1;
-		acc[i].y += -9.8;
+//		acc[i].y += -9.8;
 	}
 }
 
@@ -498,6 +498,7 @@ void simulation::write_file(const size_t &step, const Float &time){
 		<< rw::theta << " " << rw::w << endl;
 
 	for(auto i=0;i<particle_number;i++){
+		if(type[i] == GHOST) continue;
 		f << type[i] << " "
 			<< pos[i].x << " "
 			<< pos[i].y << " "
