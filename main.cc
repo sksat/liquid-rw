@@ -12,7 +12,7 @@
 
 namespace simulation {
 	size_t time_step = 0;
-	Float time=.0, dt=0.00000001, finish_time=0.5;
+	Float time=.0, dt=0.000000001, finish_time=0.5;
 	size_t dim=2;
 
 	// 定数たち
@@ -49,7 +49,7 @@ namespace simulation {
 		std::unique_ptr<int[]> first, last, next;
 	}
 
-	size_t output_interval = 5;
+	size_t output_interval = 100;
 	size_t file_number = 0;
 
 	template<typename T>
@@ -374,10 +374,8 @@ bool simulation::check_overflow(size_t i){
 void simulation::move_particle_tmp(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
-		vel[i].x += acc[i].x;
-		vel[i].y += acc[i].y;
-		pos[i].x += vel[i].x;
-		pos[i].y += vel[i].y;
+		vel[i] += acc[i] * dt;
+		pos[i] += vel[i] * dt;
 		acc[i].x = acc[i].y = acc[i].z = 0.0;
 		check_overflow(i);
 //		if(check_overflow(i)) std::cout<<"move_particle_tmp: "<<i<<std::endl;
@@ -457,7 +455,7 @@ void simulation::make_press(){
 		}
 		Float mi = dens[type[i]];
 		Float pressure = (ni > n0) * (ni - n0) * A2 * mi;
-		press[i] = pressure/0.1;
+		press[i] = pressure;
 //		if(pressure != 0.0) PRINT(pressure);
 	}
 }
