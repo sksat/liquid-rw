@@ -49,7 +49,7 @@ namespace simulation {
 		std::unique_ptr<int[]> first, last, next;
 	}
 
-	size_t output_interval = 100;
+	size_t output_interval = 0.001/dt;
 	size_t file_number = 0;
 
 	template<typename T>
@@ -258,7 +258,7 @@ void simulation::main_loop(){
 			if(type[i] != FLUID) continue;
 			auto v = vel[i].x*vel[i].x + vel[i].y*vel[i].y;
 			if(max_vel < v) max_vel = v;
-			for(auto j=0;j<particle_number;j++){
+/*			for(auto j=0;j<particle_number;j++){
 				if(i == j) continue;
 				if(type[i] != FLUID) continue;
 				if(pos[i].x == pos[j].x && pos[i].y == pos[j].y){
@@ -270,7 +270,7 @@ void simulation::main_loop(){
 					PRINT(pos[j].y);
 //					throw std::runtime_error("fuck NVIDIA!");
 				}
-			}
+			}*/
 		}
 		if(dt < (0.2 * pcl_dst / max_vel)){}
 		else
