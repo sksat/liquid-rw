@@ -10,6 +10,8 @@
 #include <sksat/math/vector.hpp>
 #include "common.hpp"
 
+#define OMP_CHUNK_NUM	64
+
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0, dt=0.000000001, finish_time=0.5;
@@ -315,6 +317,7 @@ void simulation::make_bucket(){
 }
 
 void simulation::calc_tmpacc(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
@@ -372,6 +375,7 @@ bool simulation::check_overflow(size_t i){
 }
 
 void simulation::move_particle_tmp(){
+#pragma omp parallel for
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		vel[i] += acc[i] * dt;
@@ -383,6 +387,7 @@ void simulation::move_particle_tmp(){
 }
 
 void simulation::check_collision(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		Float mi = dens[type[i]];
@@ -422,6 +427,7 @@ void simulation::check_collision(){
 }
 
 void simulation::make_press(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
 //		if(-0.1 < pos[i].y && pos[i].y < 0.1){
@@ -461,6 +467,7 @@ void simulation::make_press(){
 }
 
 void simulation::calc_press_grad(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
@@ -515,6 +522,7 @@ void simulation::calc_press_grad(){
 }
 
 void simulation::move_particle(){
+#pragma omp parallel for
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		vel[i] += acc[i] * dt;
