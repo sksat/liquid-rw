@@ -11,11 +11,13 @@
 #include "common.hpp"
 
 #define OMP_CHUNK_NUM	64
+#define CHECK_DT
+//#define CHECK_SAME_POS
 
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	const Float dt=0.000001, finish_time=0.5;
+	const Float dt=0.000001, finish_time=0.1;
 	size_t dim=2;
 	const size_t progress_interval = 100;
 	const size_t output_interval = 1000;
@@ -254,14 +256,12 @@ void simulation::main_loop(){
 
 		calc_tmpacc();
 		Float max_vel = 0.0;
+#ifdef CHECK_DT
 		for(auto i=0;i<particle_number;i++){
-			if(-rw::r_out/100 < pos[i].y && pos[i].y < rw::r_out/100){
-//				if(pos[i].x > 0.0)
-//					vel[i].y = 0.001;
-			}
 			if(type[i] != FLUID) continue;
 			auto v = vel[i].x*vel[i].x + vel[i].y*vel[i].y;
 			if(max_vel < v) max_vel = v;
+#ifdef CHECK_SAME_POS
 			for(auto j=0;j<particle_number;j++){
 				if(i == j) continue;
 				if(type[i] != FLUID) continue;
@@ -272,13 +272,17 @@ void simulation::main_loop(){
 					PRINT(pos[j].x);
 					PRINT(pos[i].y);
 					PRINT(pos[j].y);
-//					throw std::runtime_error("fuck NVIDIA!");
+					throw std::runtime_error("fuck NVIDIA!");
 				}
 			}
+#endif
 		}
+#endif
 		if(dt < (0.2 * pcl_dst / max_vel)){}
-		else
-			std::cout<<"dt is not ok: "<<"max-vel="<<max_vel<<std::endl;
+		else{
+			std::cout<<"max-vel="<<max_vel<<std::endl;
+			throw std::runtime_error("dt is not ok.");
+		}
 		move_particle_tmp(); // temporary
 		check_collision();
 		make_press();
