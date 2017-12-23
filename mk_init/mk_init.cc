@@ -51,14 +51,15 @@ void write_data(){
 			auto r2 = x*x + y*y;
 			if(r2 > r_out*r_out){
 				if(r2 > (r_out+width)*(r_out+width))
-					continue;
-				p.type = WALL;
-			}else if(r2 > (r_in+1)*(r_in+1)){
+					p.type = DUMMY;
+				else
+					p.type = WALL;
+			}else if(r2 > (r_in)*(r_in)){
 				p.type = FLUID;
 			}else if(width >= r_in){
 				p.type = WALL;
 			}else{
-				if(r2 > (r_in-width-1)*(r_in-width-1))
+				if(r2 > (r_in-width)*(r_in-width))
 					p.type = WALL;
 				else
 					continue;

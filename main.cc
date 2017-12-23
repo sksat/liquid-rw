@@ -12,7 +12,7 @@
 
 namespace simulation {
 	size_t time_step = 0;
-	Float time=.0, dt=0.001, finish_time=0.5;
+	Float time=.0, dt=0.00000001, finish_time=0.5;
 	size_t dim=2;
 
 	// 定数たち
@@ -49,7 +49,7 @@ namespace simulation {
 		std::unique_ptr<int[]> first, last, next;
 	}
 
-	size_t output_interval = 20;
+	size_t output_interval = 5;
 	size_t file_number = 0;
 
 	template<typename T>
@@ -58,7 +58,7 @@ namespace simulation {
 	void main_loop();
 	void make_bucket();
 	void calc_tmpacc();
-	void check_overflow(size_t i);
+	bool check_overflow(size_t i);
 	void move_particle_tmp();
 	void check_collision();
 	void make_press();
@@ -142,13 +142,24 @@ void simulation::load_file(const std::string &fname){
 	}
 
 	auto tmp = rw::r_out - rw::r_in;
-	min.x = min.y = (rw::r_out + tmp) * -1.0;
-	max.x = max.y = (rw::r_out + tmp);
+	min.x = min.y = (rw::r_out + tmp) * -1.0 - pcl_dst;
+	max.x = max.y = (rw::r_out + tmp) + pcl_dst;
 
 	PRINT(min.x);
 	PRINT(min.y);
 	PRINT(max.x);
 	PRINT(max.y);
+
+	for(auto i=0;i<particle_number;i++){
+		if(pos[i].x <= min.x || max.x <= pos[i].x){
+			std::cout<<"error: ";
+			PRINT(pos[i].x);
+		}
+		if(pos[i].y <= min.y || max.y <= pos[i].y){
+			std::cout<<"error: ";
+			PRINT(pos[i].y);
+		}
+	}
 }
 
 void simulation::alloc_bucket(){
@@ -194,9 +205,15 @@ void simulation::set_param(){
 	}
 	n0	= tn0;
 	lmd	= tlmd / tn0;
-	A1 = 2.0 * knm_vsc * dim / n0 / lmd;
+	A1 = 2.0 * knm_vsc * static_cast<Float>(dim) / (n0 * lmd);
 	A2 = sound_vel * sound_vel / n0;
-	A3 = -1 * dim / n0;
+	A3 = -1.0 * static_cast<Float>(dim) / n0;
+
+	PRINT(n0);
+	PRINT(lmd);
+	PRINT(A1);
+	PRINT(A2);
+	PRINT(A3);
 
 	dens[FLUID]	= dens_fluid;
 	dens[WALL]	= dens_wall;
@@ -205,21 +222,59 @@ void simulation::set_param(){
 
 	rlim	= pcl_dst * dst_lmt_rat;
 	rlim2	= rlim * rlim;
+
+	PRINT(dens[FLUID]);
+	PRINT(dens[WALL]);
+	PRINT(rlim);
+
+	auto D = 0.9;
+	if(
+		dt < (D * (pcl_dst * pcl_dst) / knm_vsc) &&
+		dt < (pcl_dst / sound_vel)
+	){
+		std::cout<<"dt is ok!"<<std::endl;
+	}else{
+		throw std::runtime_error("dt is not ok.");
+	}
 }
 
 void simulation::main_loop(){
+//	for(auto i=0;i<particle_number;i++){
+//		if(type[i] == WALL)
+//			type[i] = GHOST;
+//	}
 	if(time_step == 0)
 		write_file(0, time);
 	while(true){
 		make_bucket();
 
 		calc_tmpacc();
+		Float max_vel = 0.0;
 		for(auto i=0;i<particle_number;i++){
 			if(-rw::r_out/100 < pos[i].y && pos[i].y < rw::r_out/100){
 //				if(pos[i].x > 0.0)
 //					vel[i].y = 0.001;
 			}
+			if(type[i] != FLUID) continue;
+			auto v = vel[i].x*vel[i].x + vel[i].y*vel[i].y;
+			if(max_vel < v) max_vel = v;
+			for(auto j=0;j<particle_number;j++){
+				if(i == j) continue;
+				if(type[i] != FLUID) continue;
+				if(pos[i].x == pos[j].x && pos[i].y == pos[j].y){
+					PRINT(i);
+					PRINT(j);
+					PRINT(pos[i].x);
+					PRINT(pos[j].x);
+					PRINT(pos[i].y);
+					PRINT(pos[j].y);
+//					throw std::runtime_error("fuck NVIDIA!");
+				}
+			}
 		}
+		if(dt < (0.2 * pcl_dst / max_vel)){}
+		else
+			throw std::runtime_error("dt is not ok");
 		move_particle_tmp(); // temporary
 		check_collision();
 		make_press();
@@ -271,6 +326,9 @@ void simulation::calc_tmpacc(){
 				int jb = jy*bucket::nx + jx;
 				if(jb >= bucket::nxy*4){
 					PRINT(i);
+					PRINT(type[i]);
+					PRINT(pos[i].x);
+					PRINT(pos[i].y);
 					PRINT(ix);
 					PRINT(iy);
 					PRINT(jx);
@@ -301,14 +359,16 @@ void simulation::calc_tmpacc(){
 	}
 }
 
-void simulation::check_overflow(size_t i){
+bool simulation::check_overflow(size_t i){
 	if(
 		pos[i].x > max.x || pos[i].x < min.x ||
 		pos[i].y > max.y || pos[i].y < min.y
 	  ){
 		type[i] = GHOST;
 		press[i] = vel[i].x = vel[i].y = 0.0;
+		return true;
 	}
+	return false;
 }
 
 void simulation::move_particle_tmp(){
@@ -318,7 +378,9 @@ void simulation::move_particle_tmp(){
 		vel[i].y += acc[i].y;
 		pos[i].x += vel[i].x;
 		pos[i].y += vel[i].y;
+		acc[i].x = acc[i].y = acc[i].z = 0.0;
 		check_overflow(i);
+//		if(check_overflow(i)) std::cout<<"move_particle_tmp: "<<i<<std::endl;
 	}
 }
 
@@ -395,7 +457,7 @@ void simulation::make_press(){
 		}
 		Float mi = dens[type[i]];
 		Float pressure = (ni > n0) * (ni - n0) * A2 * mi;
-		press[i] = pressure;
+		press[i] = pressure/0.1;
 //		if(pressure != 0.0) PRINT(pressure);
 	}
 }
@@ -459,8 +521,9 @@ void simulation::move_particle(){
 		if(type[i] != FLUID) continue;
 		vel[i] += acc[i] * dt;
 		pos[i] += acc[i] * dt * dt;
-		acc[i].x = acc[i].y = acc[i].z = 0.0;
 		check_overflow(i);
+//		if(check_overflow(i)) std::cout<<"move_particle: "<<acc[i].x<<std::endl;
+		acc[i].x = acc[i].y = acc[i].z = 0.0;
 	}
 }
 
