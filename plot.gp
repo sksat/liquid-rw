@@ -4,6 +4,6 @@ set output "out/out.gif"
 set xrange[-20:20]
 set yrange[-20:20]
 n0 = 0
-n1 = 25
+n1 = 500
 dn = 1
 load "plot.plt"

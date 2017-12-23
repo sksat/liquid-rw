@@ -15,10 +15,10 @@
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	const Float dt=0.000000001, finish_time=0.5;
+	const Float dt=0.000001, finish_time=0.5;
 	size_t dim=2;
 	const size_t progress_interval = 100;
-	const size_t output_interval = 0.001/dt;
+	const size_t output_interval = 1000;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -262,7 +262,7 @@ void simulation::main_loop(){
 			if(type[i] != FLUID) continue;
 			auto v = vel[i].x*vel[i].x + vel[i].y*vel[i].y;
 			if(max_vel < v) max_vel = v;
-/*			for(auto j=0;j<particle_number;j++){
+			for(auto j=0;j<particle_number;j++){
 				if(i == j) continue;
 				if(type[i] != FLUID) continue;
 				if(pos[i].x == pos[j].x && pos[i].y == pos[j].y){
@@ -274,11 +274,11 @@ void simulation::main_loop(){
 					PRINT(pos[j].y);
 //					throw std::runtime_error("fuck NVIDIA!");
 				}
-			}*/
+			}
 		}
 		if(dt < (0.2 * pcl_dst / max_vel)){}
 		else
-			throw std::runtime_error("dt is not ok");
+			std::cout<<"dt is not ok: "<<"max-vel="<<max_vel<<std::endl;
 		move_particle_tmp(); // temporary
 		check_collision();
 		make_press();
