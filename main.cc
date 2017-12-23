@@ -15,8 +15,11 @@
 
 namespace simulation {
 	size_t time_step = 0;
-	Float time=.0, dt=0.000000001, finish_time=0.5;
+	Float time=.0;
+	const Float dt=0.000000001, finish_time=0.5;
 	size_t dim=2;
+	const size_t progress_interval = 100;
+	const size_t output_interval = 0.001/dt;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -52,7 +55,6 @@ namespace simulation {
 		std::unique_ptr<int[]> first, last, next;
 	}
 
-	size_t output_interval = 100;
 	size_t file_number = 0;
 
 	template<typename T>
@@ -255,10 +257,6 @@ void simulation::main_loop(){
 		Float max_vel = 0.0;
 #ifdef CHECK_DT
 		for(auto i=0;i<particle_number;i++){
-			if(-rw::r_out/100 < pos[i].y && pos[i].y < rw::r_out/100){
-//				if(pos[i].x > 0.0)
-//					vel[i].y = 0.001;
-			}
 			if(type[i] != FLUID) continue;
 			auto v = vel[i].x*vel[i].x + vel[i].y*vel[i].y;
 			if(max_vel < v) max_vel = v;
@@ -273,7 +271,7 @@ void simulation::main_loop(){
 					PRINT(pos[j].x);
 					PRINT(pos[i].y);
 					PRINT(pos[j].y);
-//					throw std::runtime_error("fuck NVIDIA!");
+					throw std::runtime_error("fuck NVIDIA!");
 				}
 			}
 #endif
@@ -293,12 +291,15 @@ void simulation::main_loop(){
 
 		time_step++;
 		time += dt;
-		if( (time_step % output_interval) == 0 ){
+		if( (time_step % progress_interval) == 0 ){
 			std::cout
 				<< "time step: " << std::setw(5) << time_step << "  "
 				<< "time: " << std::setw(5) << time << "  "
 				<< "particle number: " << particle_number
 				<< std::endl;
+		}
+
+		if( (time_step % output_interval) == 0){
 			write_file(time_step, time);
 		}
 		if(time >= finish_time) break;

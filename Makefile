@@ -10,6 +10,7 @@ GIF	= $(OUT_DIR)/out.gif
 CC	= gcc
 CXX	= g++
 CXXFLAGS= -std=c++14 -g
+LDFLAGS	= -lm
 
 %.o : %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -43,7 +44,7 @@ clean_out:
 	rm $(OUT_DIR)/*
 
 $(TARGET):$(OBJS)
-	$(CXX) -o $@ $^
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 $(INIT):$(INIT_DIR)/mk_init.cc
 	make -C $(INIT_DIR) run
