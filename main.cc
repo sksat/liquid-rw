@@ -14,8 +14,11 @@
 
 namespace simulation {
 	size_t time_step = 0;
-	Float time=.0, dt=0.000000001, finish_time=0.5;
+	Float time=.0;
+	const Float dt=0.000000001, finish_time=0.5;
 	size_t dim=2;
+	const size_t progress_interval = 100;
+	const size_t output_interval = 0.001/dt;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -51,7 +54,6 @@ namespace simulation {
 		std::unique_ptr<int[]> first, last, next;
 	}
 
-	size_t output_interval = 0.001/dt;
 	size_t file_number = 0;
 
 	template<typename T>
@@ -288,12 +290,15 @@ void simulation::main_loop(){
 
 		time_step++;
 		time += dt;
-		if( (time_step % output_interval) == 0 ){
+		if( (time_step % progress_interval) == 0 ){
 			std::cout
 				<< "time step: " << std::setw(5) << time_step << "  "
 				<< "time: " << std::setw(5) << time << "  "
 				<< "particle number: " << particle_number
 				<< std::endl;
+		}
+
+		if( (time_step % output_interval) == 0){
 			write_file(time_step, time);
 		}
 		if(time >= finish_time) break;
