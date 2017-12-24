@@ -17,7 +17,7 @@
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	const Float dt=0.000001, finish_time=0.1;
+	const Float dt=0.000000001, finish_time=0.01;
 	size_t dim=2;
 	const size_t progress_interval = 100;
 	const size_t output_interval = 1000;
