@@ -1,6 +1,9 @@
 if(exist("n")==0 || n<0) n = n0
 fname = sprintf("out/output_%05d.prof", n)
 
+time = system("sed -n 2P " . fname)
+set title time
+
 rgb(r,g,b) = 65536 * int(r) + 256 * int(g) + int(b)
 
 unset colorbox

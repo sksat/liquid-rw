@@ -16,10 +16,10 @@
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	const Float dt=0.000000001, finish_time=0.5;
-	size_t dim=2;
+	const Float dt=0.0000001, finish_time=1.0;
+	size_t dim=3;
 	const size_t progress_interval = 100;
-	const size_t output_interval = 0.001/dt;
+	const size_t output_interval = 100;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -50,8 +50,8 @@ namespace simulation {
 
 	namespace bucket {
 		Float width, width2, width_inv;
-		size_t nx, ny;
-		size_t nxy;
+		size_t nx, ny, nz;
+		size_t nxy, nxyz;
 		std::unique_ptr<int[]> first, last, next;
 	}
 
@@ -133,13 +133,17 @@ void simulation::load_file(const std::string &fname){
 	press.reserve(particle_number);
 	type.reserve(particle_number);
 
+	Float pav;
 	for(auto i=0;i<particle_number;i++){
 		f >> type[i]
 			>> pos[i].x
 			>> pos[i].y
+			>> pos[i].z
 			>> vel[i].x
 			>> vel[i].y
-			>> press[i];
+			>> vel[i].z
+			>> press[i]
+			>> pav;
 		if(f.eof()){
 			std::cerr<<"stop: "<<i<<std::endl;
 			throw std::runtime_error("");
@@ -148,21 +152,28 @@ void simulation::load_file(const std::string &fname){
 
 	auto tmp = rw::r_out - rw::r_in;
 	min.x = min.y = (rw::r_out + tmp) * -1.0 - pcl_dst;
+	min.z = -1.0 * pcl_dst;
 	max.x = max.y = (rw::r_out + tmp) + pcl_dst;
+	max.z = pcl_dst;
 
 	PRINT(min.x);
 	PRINT(min.y);
+	PRINT(min.z);
 	PRINT(max.x);
 	PRINT(max.y);
+	PRINT(max.z);
 
 	for(auto i=0;i<particle_number;i++){
-		if(pos[i].x <= min.x || max.x <= pos[i].x){
-			std::cout<<"error: ";
+		if(
+			pos[i].x < min.x || max.x < pos[i].x ||
+			pos[i].y < min.y || max.y < pos[i].y ||
+			pos[i].z < min.z || max.z < pos[i].z
+		){
+			std::cout<<"error: "<<std::endl;
 			PRINT(pos[i].x);
-		}
-		if(pos[i].y <= min.y || max.y <= pos[i].y){
-			std::cout<<"error: ";
 			PRINT(pos[i].y);
+			PRINT(pos[i].z);
+			getchar();
 		}
 	}
 }
@@ -179,37 +190,39 @@ void simulation::alloc_bucket(){
 
 	nx = static_cast<int>((max.x - min.x) * width_inv) + 3;
 	ny = static_cast<int>((max.y - min.y) * width_inv) + 3;
-	nxy = nx * ny;
+	nz = static_cast<int>((max.z - min.z) * width_inv) + 3;
+	nxy  = nx * ny;
+	nxyz = nx * ny * nz;
 
 	PRINT(bucket::nx);
 	PRINT(bucket::ny);
 	PRINT(bucket::nxy);
+	PRINT(bucket::nxyz);
 
-	bucket::first = std::make_unique<int[]>(nxy*4);
-	bucket::last = std::make_unique<int[]>(nxy*4);
+	bucket::first = std::make_unique<int[]>(nxyz);
+	bucket::last = std::make_unique<int[]>(nxyz);
 	bucket::next  = std::make_unique<int[]>(particle_number);
 }
 
 void simulation::set_param(){
-	Float tn0 = 0.0;
-	Float tlmd= 0.0;
-
-	for(int ix=-4;ix<5;ix++){
-		for(int iy=-4;iy<5;iy++){
-			Float x = pcl_dst * static_cast<double>(ix);
-			Float y = pcl_dst * static_cast<double>(iy);
-			Float dist2 = x*x + y*y;
-			if(dist2 <= r2){
-				if(dist2 == 0.0) continue;
-				Float dist = sqrt(dist2);
-				Float tmp = weight(dist, r);
-				tn0 += tmp;
-				tlmd+= dist2 * tmp;
+	n0 = lmd = 0.0;
+	for(int iz=-4;iz<5;iz++){
+		for(int ix=-4;ix<5;ix++){
+			for(int iy=-4;iy<5;iy++){
+				Float x = pcl_dst * static_cast<double>(ix);
+				Float y = pcl_dst * static_cast<double>(iy);
+				Float z = pcl_dst * static_cast<double>(iz);
+				Float dist2 = x*x + y*y + z*z;
+				if(dist2 <= r2){
+					if(dist2 == 0.0) continue;
+					Float dist = sqrt(dist2);
+					n0  += weight(dist, r);
+					lmd += dist2 * weight(dist, r);
+				}
 			}
 		}
 	}
-	n0	= tn0;
-	lmd	= tlmd / tn0;
+	lmd	= lmd / n0;
 	A1 = 2.0 * knm_vsc * static_cast<Float>(dim) / (n0 * lmd);
 	A2 = sound_vel * sound_vel / n0;
 	A3 = -1.0 * static_cast<Float>(dim) / n0;
@@ -244,10 +257,6 @@ void simulation::set_param(){
 }
 
 void simulation::main_loop(){
-//	for(auto i=0;i<particle_number;i++){
-//		if(type[i] == WALL)
-//			type[i] = GHOST;
-//	}
 	if(time_step == 0)
 		write_file(0, time);
 	while(true){
@@ -278,8 +287,9 @@ void simulation::main_loop(){
 		}
 #endif
 		if(dt < (0.2 * pcl_dst / max_vel)){}
-		else
-			throw std::runtime_error("dt is not ok");
+		//else
+			//std::cout<<"dt is not ok"<<std::endl;
+			//throw std::runtime_error("dt is not ok");
 		move_particle_tmp(); // temporary
 		check_collision();
 		make_press();
@@ -314,7 +324,8 @@ void simulation::make_bucket(){
 		if(type[i] == GHOST) continue;
 		int ix = static_cast<int>((pos[i].x - min.x) * width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y) * width_inv) + 1;
-		int ib = iy * nx + ix;
+		int iz = static_cast<int>((pos[i].z - min.z) * width_inv) + 1;
+		int ib = iz*nxy + iy*nx + ix;
 		int j = last[ib];
 		last[ib] = i;
 		if(j == -1){ first[ib] = i; }
@@ -326,39 +337,43 @@ void simulation::calc_tmpacc(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
-		Acc.x = Acc.y = 0.0;
+		Acc.x = Acc.y = Acc.z = 0.0;
 		int ix = static_cast<int>((pos[i].x - min.x) * bucket::width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y) * bucket::width_inv) + 1;
-		for(int jy=iy-1;jy<=iy+1;jy++){
-			for(int jx=ix-1;jx<=ix+1;jx++){
-				int jb = jy*bucket::nx + jx;
-				if(jb >= bucket::nxy*4){
-					PRINT(i);
-					PRINT(type[i]);
-					PRINT(pos[i].x);
-					PRINT(pos[i].y);
-					PRINT(ix);
-					PRINT(iy);
-					PRINT(jx);
-					PRINT(jy);
-					PRINT(jb);
-					getchar();
-				}
-				int j = bucket::first[jb];
-				if(j == -1) continue;
-				for(;;){
-					Float v0 = pos[j].x - pos[i].x;
-					Float v1 = pos[j].y - pos[i].y;
-					Float dist2 = v0*v0 + v1*v1;
-					if(dist2 < r2){
-						if(j!=i && type[j]!=GHOST){
-							Float dist = sqrt(dist2);
-							Float w = weight(dist, r);
-							Acc += (vel[j] - vel[i]) * w;
-						}
+		int iz = static_cast<int>((pos[i].z - min.z) * bucket::width_inv) + 1;
+		for(int jz=iz-1;jz<=iz+1;jz++){
+			for(int jy=iy-1;jy<=iy+1;jy++){
+				for(int jx=ix-1;jx<=ix+1;jx++){
+					int jb = jz*bucket::nxy + jy*bucket::nx + jx;
+					if(jb >= bucket::nxyz){
+						PRINT(i);
+						PRINT(type[i]);
+						PRINT(pos[i].x);
+						PRINT(pos[i].y);
+						PRINT(ix);
+						PRINT(iy);
+						PRINT(jx);
+						PRINT(jy);
+						PRINT(jb);
+						getchar();
 					}
-					j = bucket::next[j];
-					if(j == -1) break;
+					int j = bucket::first[jb];
+					if(j == -1) continue;
+					for(;;){
+						Float v0 = pos[j].x - pos[i].x;
+						Float v1 = pos[j].y - pos[i].y;
+						Float v2 = pos[j].z - pos[i].z;
+						Float dist2 = v0*v0 + v1*v1 + v2*v2;
+						if(dist2 < r2){
+							if(j!=i && type[j]!=GHOST){
+								Float dist = sqrt(dist2);
+								Float w = weight(dist, r);
+								Acc += (vel[j] - vel[i]) * w;
+							}
+						}
+						j = bucket::next[j];
+						if(j == -1) break;
+					}
 				}
 			}
 		}
@@ -372,6 +387,7 @@ bool simulation::check_overflow(size_t i){
 		pos[i].x > max.x || pos[i].x < min.x ||
 		pos[i].y > max.y || pos[i].y < min.y
 	  ){
+		std::cout<<"over"<<std::endl;
 		type[i] = GHOST;
 		press[i] = vel[i].x = vel[i].y = 0.0;
 		return true;
@@ -394,31 +410,36 @@ void simulation::check_collision(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		Float mi = dens[type[i]];
-		sksat::math::vector<Float> vec_i = vel[i], vec_i2 = vel[i];
+		auto vec_i = vel[i], vec_i2 = vel[i];
 		int ix = static_cast<int>((pos[i].x - min.x) * bucket::width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y) * bucket::width_inv) + 1;
-		for(int jy=iy-1; jy<=iy+1; jy++){
-			for(int jx=ix-1; jx<=ix+1; jx++){
-				int jb = jy * bucket::nx + ix;
-				int j = bucket::first[jb];
-				if(j == -1) continue;
-				for(;;){
-					Float v0 = pos[j].x - pos[i].x;
-					Float v1 = pos[j].y - pos[i].y;
-					Float dist2 = v0*v0 + v1*v1;
-					if(dist2 < rlim2){
-						if(j!=i && type[i]!= GHOST){
-							Float fDT = (vec_i.x-vel[j].x)*v0+(vec_i.y-vel[j].y)*v1;
-							if(fDT > 0.0){
-								Float mj = dens[type[j]];
-								fDT *= col * mj / (mi+mj) / dist2;
-								vec_i2.x -= v0 * fDT;
-								vec_i2.y -= v1 * fDT;
+		int iz = static_cast<int>((pos[i].z - min.z) * bucket::width_inv) + 1;
+		for(int jz=iz-1;jz<=iz+1;jz++){
+			for(int jy=iy-1; jy<=iy+1; jy++){
+				for(int jx=ix-1; jx<=ix+1; jx++){
+					int jb = jz*bucket::nxy + jy*bucket::nx + ix;
+					int j = bucket::first[jb];
+					if(j == -1) continue;
+					for(;;){
+						Float v0 = pos[j].x - pos[i].x;
+						Float v1 = pos[j].y - pos[i].y;
+						Float v2 = pos[j].z - pos[i].z;
+						Float dist2 = v0*v0 + v1*v1 + v2*v2;
+						if(dist2 < rlim2){
+							if(j!=i && type[i]!= GHOST){
+								Float fDT = (vec_i.x-vel[j].x)*v0 + (vec_i.y-vel[j].y)*v1 + (vec_i.z-vel[j].z)*v2;
+								if(fDT > 0.0){
+									Float mj = dens[type[j]];
+									fDT *= col * mj / (mi+mj) / dist2;
+									vec_i2.x -= v0 * fDT;
+									vec_i2.y -= v1 * fDT;
+									vec_i2.z -= v2 * fDT;
+								}
 							}
 						}
+						j = bucket::next[j]; // バケット内の次の粒子へ
+						if(j == -1) break;
 					}
-					j = bucket::next[j]; // バケット内の次の粒子へ
-					if(j == -1) break;
 				}
 			}
 		}
@@ -432,32 +453,31 @@ void simulation::check_collision(){
 void simulation::make_press(){
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
-//		if(-0.1 < pos[i].y && pos[i].y < 0.1){
-//			press[i] = 100.0;
-//			std::cout<<"a:"; getchar();
-//			continue;
-//		}
 		Float ni = 0.0;
 		int ix = static_cast<int>((pos[i].x - min.x)*bucket::width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y)*bucket::width_inv) + 1;
-		for(int jy=iy-1;jy<=iy+1;jy++){
-			for(int jx=ix-1;jx<=ix+1;jx++){
-				int jb = jy * bucket::nx + ix;
-				int j = bucket::first[jb];
-				if(j == -1) continue;
-				for(;;){
-					Float v0 = pos[j].x - pos[i].x;
-					Float v1 = pos[j].y - pos[i].y;
-					Float dist2 = v0*v0 + v1*v1;
-					if(dist2 < r2){
-						if(j!=i && type[j]!=GHOST){
-							Float dist = sqrt(dist2);
-							Float w = weight(dist, r);
-							ni += w;
+		int iz = static_cast<int>((pos[i].z - min.z)*bucket::width_inv) + 1;
+		for(int jz=iz-1;jz<=iz+1;jz++){
+			for(int jy=iy-1;jy<=iy+1;jy++){
+				for(int jx=ix-1;jx<=ix+1;jx++){
+					int jb = jz*bucket::nxy + jy*bucket::nx + ix;
+					int j = bucket::first[jb];
+					if(j == -1) continue;
+					for(;;){
+						Float v0 = pos[j].x - pos[i].x;
+						Float v1 = pos[j].y - pos[i].y;
+						Float v2 = pos[j].z - pos[i].z;
+						Float dist2 = v0*v0 + v1*v1 + v2*v2;
+						if(dist2 < r2){
+							if(j!=i && type[j]!=GHOST){
+								Float dist = sqrt(dist2);
+								Float w = weight(dist, r);
+								ni += w;
+							}
 						}
+						j = bucket::next[j];
+						if(j == -1) break;
 					}
-					j = bucket::next[j];
-					if(j == -1) break;
 				}
 			}
 		}
@@ -476,45 +496,53 @@ void simulation::calc_press_grad(){
 		Float pre_min = press[i];
 		int ix = static_cast<int>((pos[i].x - min.x)*bucket::width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y)*bucket::width_inv) + 1;
-		for(int jy=iy-1;jy<=iy+1;jy++){
-			for(int jx=ix-1;jx<=ix+1;jx++){
-				int jb = jy*bucket::nx + jx;
-				int j = bucket::first[jb];
-				if(j == -1) continue;
-				for(;;){
-					Float v0 = pos[j].x - pos[i].x;
-					Float v1 = pos[j].y - pos[i].y;
-					Float dist2 = v0*v0 + v1*v1;
-					if(dist2 < r2){
-						if(j!=i && type[j]!=GHOST){
-							if(pre_min > press[j]) pre_min = press[j];
+		int iz = static_cast<int>((pos[i].z - min.z)*bucket::width_inv) + 1;
+		for(int jz=iz-1;jz<=iz+1;jz++){
+			for(int jy=iy-1;jy<=iy+1;jy++){
+				for(int jx=ix-1;jx<=ix+1;jx++){
+					int jb = jz*bucket::nxy + jy*bucket::nx + jx;
+					int j = bucket::first[jb];
+					if(j == -1) continue;
+					for(;;){
+						Float v0 = pos[j].x - pos[i].x;
+						Float v1 = pos[j].y - pos[i].y;
+						Float v2 = pos[j].z - pos[i].z;
+						Float dist2 = v0*v0 + v1*v1 + v2*v2;
+						if(dist2 < r2){
+							if(j!=i && type[j]!=GHOST){
+								if(pre_min > press[j]) pre_min = press[j];
+							}
 						}
+						j = bucket::next[j];
+						if(j == -1) break;
 					}
-					j = bucket::next[j];
-					if(j == -1) break;
 				}
 			}
 		}
-		for(int jy=iy-1;jy<=iy+1;jy++){
-			for(int jx=ix-1;jx<=ix+1;jx++){
-				int jb = jy * bucket::nx + jx;
-				int j = bucket::first[jb];
-				if(j == -1) continue;
-				for(;;){
-					Float v0 = pos[j].x - pos[i].x;
-					Float v1 = pos[j].y - pos[i].y;
-					Float dist2 = v0*v0 + v1*v1;
-					if(dist2 < r2){
-						if(j!=i && type[j]!=GHOST){
-							Float dist = sqrt(dist2);
-							Float w = weight(dist, r);
-							w *= (press[j] - pre_min)/dist2;
-							Acc.x += v0*w;
-							Acc.y += v1*w;
+		for(int jz=iz-1;jz<=iz+1;jz++){
+			for(int jy=iy-1;jy<=iy+1;jy++){
+				for(int jx=ix-1;jx<=ix+1;jx++){
+					int jb = jz*bucket::nxy + jy*bucket::nx + jx;
+					int j = bucket::first[jb];
+					if(j == -1) continue;
+					for(;;){
+						Float v0 = pos[j].x - pos[i].x;
+						Float v1 = pos[j].y - pos[i].y;
+						Float v2 = pos[j].z - pos[i].z;
+						Float dist2 = v0*v0 + v1*v1 + v2*v2;
+						if(dist2 < r2){
+							if(j!=i && type[j]!=GHOST){
+								Float dist = sqrt(dist2);
+								Float w = weight(dist, r);
+								w *= (press[j] - pre_min)/dist2;
+								Acc.x += v0*w;
+								Acc.y += v1*w;
+								Acc.z += v2*w;
+							}
 						}
+						j = bucket::next[j];
+						if(j == -1) break;
 					}
-					j = bucket::next[j];
-					if(j == -1) break;
 				}
 			}
 		}
@@ -534,18 +562,19 @@ void simulation::move_particle(){
 }
 
 void simulation::move_body(){
+	auto dtheta = rw::w*dt;
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != WALL) continue;
-		auto dtheta = rw::w *dt;
 		auto s = sin(dtheta);
 		auto c = cos(dtheta);
 		auto x = (pos[i].x * c) - (pos[i].y * s);
 		auto y = (pos[i].x * s) + (pos[i].y * c);
-		rw::theta += dtheta;
 		pos[i].x = x;
 		pos[i].y = y;
 		check_overflow(i);
 	}
+	rw::theta += dtheta;
+//	std::cout<<"theta: "<<rw::theta<<std::endl;
 }
 
 void simulation::write_file(const size_t &step, const Float &time){
@@ -571,8 +600,10 @@ void simulation::write_file(const size_t &step, const Float &time){
 		f << type[i] << " "
 			<< pos[i].x << " "
 			<< pos[i].y << " "
+			<< pos[i].z << " "
 			<< vel[i].x << " "
 			<< vel[i].y << " "
+			<< vel[i].z << " "
 			<< press[i] << endl;
 	}
 

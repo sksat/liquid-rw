@@ -26,6 +26,8 @@ run:$(TARGET) $(INIT)
 	./$(TARGET) $(INIT)
 
 gif:$(GIF)
+	rm -f $<
+	make $<
 
 gifup:$(GIF)
 	./upload.py $(GIF)
