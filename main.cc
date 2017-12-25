@@ -17,10 +17,10 @@
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	Float dt=0.00000001, finish_time=1.0;
+	Float dt=0.0001, finish_time=1.0;
 	size_t dim=3;
 	const size_t progress_interval = 100;
-	size_t output_interval = 100;
+	size_t output_interval = 10;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -165,7 +165,7 @@ void simulation::load_file(const std::string &fname){
 	PRINT(max.z);
 
 	for(auto i=0;i<particle_number;i++){
-		if(
+/*		if(
 			pos[i].x < min.x || max.x < pos[i].x ||
 			pos[i].y < min.y || max.y < pos[i].y ||
 			pos[i].z < min.z || max.z < pos[i].z
@@ -176,6 +176,8 @@ void simulation::load_file(const std::string &fname){
 			PRINT(pos[i].z);
 			getchar();
 		}
+*/
+		check_overflow(i);
 	}
 }
 
@@ -207,9 +209,9 @@ void simulation::alloc_bucket(){
 
 void simulation::set_param(){
 	n0 = lmd = 0.0;
-	for(int iz=-4;iz<5;iz++){
-		for(int ix=-4;ix<5;ix++){
-			for(int iy=-4;iy<5;iy++){
+	for(int ix=-4;ix<5;ix++){
+		for(int iy=-4;iy<5;iy++){
+			for(int iz=-4;iz<5;iz++){
 				Float x = pcl_dst * static_cast<double>(ix);
 				Float y = pcl_dst * static_cast<double>(iy);
 				Float z = pcl_dst * static_cast<double>(iz);
@@ -274,7 +276,7 @@ void simulation::main_loop(){
 			for(auto j=0;j<particle_number;j++){
 				if(i == j) continue;
 				if(type[i] != FLUID) continue;
-				if(pos[i].x == pos[j].x && pos[i].y == pos[j].y){
+				if(pos[i].x == pos[j].x && pos[i].y == pos[j].y && pos[i].z == pos[j].z){
 					PRINT(i);
 					PRINT(j);
 					PRINT(pos[i].x);
@@ -290,7 +292,7 @@ void simulation::main_loop(){
 		if(dt < (0.2 * pcl_dst / max_vel)){}
 		else{
 			std::cout<<"max-vel="<<max_vel<<std::endl;
-			throw std::runtime_error("dt is not ok.");
+//			throw std::runtime_error("dt is not ok.");
 //			dt = dt/2;
 //			output_interval*=2;
 		}
@@ -323,14 +325,14 @@ void simulation::main_loop(){
 
 void simulation::make_bucket(){
 	using namespace bucket;
-	for(int i=0;i<nxy*4;i++){ first[i] = -1; last[i] = -1; }
+	for(int i=0;i<nxyz;i++){ first[i] = -1; last[i] = -1; }
 	for(int i=0;i<particle_number;i++){ next[i] = -1; }
 	for(int i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
 		int ix = static_cast<int>((pos[i].x - min.x) * width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y) * width_inv) + 1;
 		int iz = static_cast<int>((pos[i].z - min.z) * width_inv) + 1;
-		int ib = iz*nxy + iy*nx + ix;
+		int ib = iz*static_cast<int>(nxy) + iy*static_cast<int>(nx) + ix;
 		int j = last[ib];
 		last[ib] = i;
 		if(j == -1){ first[ib] = i; }
@@ -350,16 +352,19 @@ void simulation::calc_tmpacc(){
 		for(int jz=iz-1;jz<=iz+1;jz++){
 			for(int jy=iy-1;jy<=iy+1;jy++){
 				for(int jx=ix-1;jx<=ix+1;jx++){
-					int jb = jz*bucket::nxy + jy*bucket::nx + jx;
+					int jb = jz*static_cast<int>(bucket::nxy) + jy*static_cast<int>(bucket::nx) + jx;
 					if(jb >= bucket::nxyz){
 						PRINT(i);
 						PRINT(type[i]);
 						PRINT(pos[i].x);
 						PRINT(pos[i].y);
+						PRINT(pos[i].z);
 						PRINT(ix);
 						PRINT(iy);
+						PRINT(iz);
 						PRINT(jx);
 						PRINT(jy);
+						PRINT(jz);
 						PRINT(jb);
 						getchar();
 					}
@@ -391,7 +396,8 @@ void simulation::calc_tmpacc(){
 bool simulation::check_overflow(size_t i){
 	if(
 		pos[i].x > max.x || pos[i].x < min.x ||
-		pos[i].y > max.y || pos[i].y < min.y
+		pos[i].y > max.y || pos[i].y < min.y ||
+		pos[i].z > max.z || pos[i].z < min.z
 	  ){
 		std::cout<<"over"<<std::endl;
 		type[i] = GHOST;
@@ -425,7 +431,7 @@ void simulation::check_collision(){
 		for(int jz=iz-1;jz<=iz+1;jz++){
 			for(int jy=iy-1; jy<=iy+1; jy++){
 				for(int jx=ix-1; jx<=ix+1; jx++){
-					int jb = jz*bucket::nxy + jy*bucket::nx + ix;
+					int jb = jz*bucket::nxy + jy*bucket::nx + jx;
 					int j = bucket::first[jb];
 					if(j == -1) continue;
 					for(;;){
@@ -469,7 +475,7 @@ void simulation::make_press(){
 		for(int jz=iz-1;jz<=iz+1;jz++){
 			for(int jy=iy-1;jy<=iy+1;jy++){
 				for(int jx=ix-1;jx<=ix+1;jx++){
-					int jb = jz*bucket::nxy + jy*bucket::nx + ix;
+					int jb = jz*bucket::nxy + jy*bucket::nx + jx;
 					int j = bucket::first[jb];
 					if(j == -1) continue;
 					for(;;){

@@ -38,10 +38,10 @@ void write_data(){
 	auto width = r_out - r_in;
 	auto xmax = r_out+width;
 	auto ymax = r_out+width;
-	auto zmax = 0.0;
+	auto zmax = 3.0;
 	auto dx = xmax / NUM_PER_DST;
 	auto dy = ymax / NUM_PER_DST;
-	auto dz = 1;
+	auto dz = 1.0;
 
 	std::cout<<"dx: "<<dx<<" dy: "<<dy<<"dz: "<<dz<<std::endl;
 
@@ -51,6 +51,10 @@ void write_data(){
 		for(auto y = -1*ymax;y<=ymax;y+=dy){
 			for(auto x=-1*xmax;x<=xmax;x+=dx){
 				Particle p;
+				if(z != 0.0){
+					p.type = WALL;
+					continue;
+				}
 				auto r2 = x*x + y*y;
 				if(r2 > r_out*r_out){
 					if(r2 > (r_out+width)*(r_out+width))
