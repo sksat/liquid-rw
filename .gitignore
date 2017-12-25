@@ -2,6 +2,7 @@ liquid-rw
 __pycache__/
 secret.py
 out/
+log.txt
 
 # Prerequisites
 *.d

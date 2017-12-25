@@ -10,16 +10,17 @@
 #include <sksat/math/vector.hpp>
 #include "common.hpp"
 
+#define OMP_CHUNK_NUM	64
 #define CHECK_DT
-#define CHECK_SAME_POS
+//#define CHECK_SAME_POS
 
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	const Float dt=0.0000001, finish_time=1.0;
+	Float dt=0.00000001, finish_time=1.0;
 	size_t dim=3;
 	const size_t progress_interval = 100;
-	const size_t output_interval = 100;
+	size_t output_interval = 100;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -287,9 +288,12 @@ void simulation::main_loop(){
 		}
 #endif
 		if(dt < (0.2 * pcl_dst / max_vel)){}
-		//else
-			//std::cout<<"dt is not ok"<<std::endl;
-			//throw std::runtime_error("dt is not ok");
+		else{
+			std::cout<<"max-vel="<<max_vel<<std::endl;
+			throw std::runtime_error("dt is not ok.");
+//			dt = dt/2;
+//			output_interval*=2;
+		}
 		move_particle_tmp(); // temporary
 		check_collision();
 		make_press();
@@ -303,8 +307,9 @@ void simulation::main_loop(){
 		time += dt;
 		if( (time_step % progress_interval) == 0 ){
 			std::cout
-				<< "time step: " << std::setw(5) << time_step << "  "
-				<< "time: " << std::setw(5) << time << "  "
+				<< std::setw(2) << static_cast<int>((time/finish_time)*100) << "% "
+				<< "time step: " << std::setw(10) << time_step << "  "
+				<< "time: " << std::setw(10) << time << "  "
 				<< "particle number: " << particle_number
 				<< std::endl;
 		}
@@ -334,6 +339,7 @@ void simulation::make_bucket(){
 }
 
 void simulation::calc_tmpacc(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
@@ -396,6 +402,7 @@ bool simulation::check_overflow(size_t i){
 }
 
 void simulation::move_particle_tmp(){
+#pragma omp parallel for
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		vel[i] += acc[i] * dt;
@@ -407,6 +414,7 @@ void simulation::move_particle_tmp(){
 }
 
 void simulation::check_collision(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		Float mi = dens[type[i]];
@@ -451,6 +459,7 @@ void simulation::check_collision(){
 }
 
 void simulation::make_press(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
 		Float ni = 0.0;
@@ -489,6 +498,7 @@ void simulation::make_press(){
 }
 
 void simulation::calc_press_grad(){
+#pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
@@ -551,6 +561,7 @@ void simulation::calc_press_grad(){
 }
 
 void simulation::move_particle(){
+#pragma omp parallel for
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] != FLUID) continue;
 		vel[i] += acc[i] * dt;
