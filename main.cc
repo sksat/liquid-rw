@@ -17,10 +17,10 @@
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	Float dt=0.0001, finish_time=1.0;
+	Float dt=0.0001, finish_time=60.0;
 	size_t dim=3;
 	const size_t progress_interval = 100;
-	size_t output_interval = 10;
+	size_t output_interval = 500;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -390,6 +390,7 @@ void simulation::calc_tmpacc(){
 		}
 		acc[i] = Acc * A1;
 //		acc[i].y += -9.8;
+		if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.05) acc[i].y += 0.1;
 	}
 }
 
@@ -498,6 +499,10 @@ void simulation::make_press(){
 		}
 		Float mi = dens[type[i]];
 		Float pressure = (ni > n0) * (ni - n0) * A2 * mi;
+		if(type[i] == FLUID){
+			if(pos[i].x > 0.0 && 0.0 < pos[i].y && pos[i].y < 0.05) pressure += 0.1;
+			if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.0) pressure -= 0.1;
+		}
 		press[i] = pressure;
 //		if(pressure != 0.0) PRINT(pressure);
 	}
