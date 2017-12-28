@@ -15,4 +15,10 @@ namespace rw {
 	Float theta, w;
 }
 
-const int NUM_PER_DST = 30;
+namespace pump {
+	Float capacity;
+	Float v;
+	int num, num_once, times;
+}
+
+const int NUM_PER_DST = 20;

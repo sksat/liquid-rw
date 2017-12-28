@@ -14,13 +14,15 @@
 #define CHECK_DT
 //#define CHECK_SAME_POS
 
+#define GHOST_BUF	10000
+
 namespace simulation {
 	size_t time_step = 0;
 	Float time=.0;
-	Float dt=0.0001, finish_time=60.0;
+	Float dt=0.00005, finish_time=60.0;
 	size_t dim=3;
-	const size_t progress_interval = 100;
-	size_t output_interval = 500;
+	const size_t progress_interval = 1000;
+	size_t output_interval = 1000;
 
 	// 定数たち
 	Float pcl_dst	= 0.02;		// 平均粒子間距離(今は決め打ち)
@@ -49,6 +51,10 @@ namespace simulation {
 	Float dens_inv[NUM_TYPE];
 	Float rlim, rlim2;		// これ以上の粒子間の接近を許さない距離
 
+	namespace particle {
+		Float v;
+	}
+
 	namespace bucket {
 		Float width, width2, width_inv;
 		size_t nx, ny, nz;
@@ -61,6 +67,22 @@ namespace simulation {
 	template<typename T>
 	inline T weight(T dist, T re){ return ((re/dist) - 1.0); } // 重み関数
 
+	inline bool is_in_tube(sksat::math::vector<Float> &p){
+		auto r_xy2 = p.x*p.x + p.y*p.y;
+		auto in2 = rw::r_in*rw::r_in;
+		auto out2 = rw::r_out*rw::r_out;
+		if(out2 < r_xy2 || r_xy2 < in2) return false;
+		if(dim == 2) return true;
+		auto r_tube = (rw::r_out-rw::r_in)*0.5;
+		auto r_xyz  =sqrt(r_xy2) - (rw::r_in+r_tube);
+		if(r_tube*r_tube < r_xyz*r_xyz + p.z*p.z){
+//			std::cout<<p.x<<","<<p.y<<","<<p.z<<std::endl;
+//			getchar();
+			return false;
+		}
+		return true;
+	}
+
 	void main_loop();
 	void make_bucket();
 	void calc_tmpacc();
@@ -71,6 +93,7 @@ namespace simulation {
 	void calc_press_grad(); // 圧力勾配項
 	void move_particle();
 	void move_body();
+	void do_pump();
 
 	void load_file(const std::string &fname);
 	void alloc_bucket();
@@ -114,7 +137,12 @@ void simulation::load_file(const std::string &fname){
 		>> dim
 		>> rw::r_in >> rw::r_out
 		>> rw::theta >> rw::w
+		>> pump::capacity
+		>> pump::v
 		>> particle_number;
+
+	PRINT(particle_number);
+	particle_number = particle_number + GHOST_BUF;
 
 	PRINT(time_step);
 	PRINT(time);
@@ -123,6 +151,7 @@ void simulation::load_file(const std::string &fname){
 	PRINT(rw::r_out);
 	PRINT(rw::theta);
 	PRINT(rw::w);
+	PRINT(pump::capacity);
 	PRINT(particle_number);
 
 	pcl_dst = ((rw::r_out-rw::r_in)+rw::r_out)/static_cast<Float>(NUM_PER_DST);
@@ -145,17 +174,19 @@ void simulation::load_file(const std::string &fname){
 			>> vel[i].z
 			>> press[i]
 			>> pav;
-		if(f.eof()){
+		if(f.fail()){
 			std::cerr<<"stop: "<<i<<std::endl;
-			throw std::runtime_error("");
+			for(;i<particle_number;i++)
+				type[i] = GHOST;
+//			throw std::runtime_error("");
 		}
 	}
 
 	auto tmp = rw::r_out - rw::r_in;
 	min.x = min.y = (rw::r_out + tmp) * -1.0 - pcl_dst;
-	min.z = -1.0 * pcl_dst;
+	min.z = -1.0*tmp*2;
 	max.x = max.y = (rw::r_out + tmp) + pcl_dst;
-	max.z = pcl_dst;
+	max.z = tmp*2;
 
 	PRINT(min.x);
 	PRINT(min.y);
@@ -165,18 +196,7 @@ void simulation::load_file(const std::string &fname){
 	PRINT(max.z);
 
 	for(auto i=0;i<particle_number;i++){
-/*		if(
-			pos[i].x < min.x || max.x < pos[i].x ||
-			pos[i].y < min.y || max.y < pos[i].y ||
-			pos[i].z < min.z || max.z < pos[i].z
-		){
-			std::cout<<"error: "<<std::endl;
-			PRINT(pos[i].x);
-			PRINT(pos[i].y);
-			PRINT(pos[i].z);
-			getchar();
-		}
-*/
+		if(type[i] != FLUID) continue;
 		check_overflow(i);
 	}
 }
@@ -185,7 +205,7 @@ void simulation::alloc_bucket(){
 	using namespace bucket;
 
 	r = pcl_dst * 2.1;
-	r2 = r*r;
+	r2= r * r;
 
 	width = r * (1.0 + crt_num); // バケット一辺の長さ
 	width2 = width * width;
@@ -199,6 +219,7 @@ void simulation::alloc_bucket(){
 
 	PRINT(bucket::nx);
 	PRINT(bucket::ny);
+	PRINT(bucket::nz);
 	PRINT(bucket::nxy);
 	PRINT(bucket::nxyz);
 
@@ -209,12 +230,15 @@ void simulation::alloc_bucket(){
 
 void simulation::set_param(){
 	n0 = lmd = 0.0;
+	int num = 0;
+
 	for(int ix=-4;ix<5;ix++){
 		for(int iy=-4;iy<5;iy++){
 			for(int iz=-4;iz<5;iz++){
-				Float x = pcl_dst * static_cast<double>(ix);
-				Float y = pcl_dst * static_cast<double>(iy);
-				Float z = pcl_dst * static_cast<double>(iz);
+				num++;
+				Float x = pcl_dst * static_cast<Float>(ix);
+				Float y = pcl_dst * static_cast<Float>(iy);
+				Float z = pcl_dst * static_cast<Float>(iz);
 				Float dist2 = x*x + y*y + z*z;
 				if(dist2 <= r2){
 					if(dist2 == 0.0) continue;
@@ -225,6 +249,41 @@ void simulation::set_param(){
 			}
 		}
 	}
+	
+	auto tmp = 8.0 * pcl_dst;
+	particle::v = tmp*tmp*tmp/num; // 粒子１つあたりの体積
+	pump::num = static_cast<int>(pump::v / particle::v); // ポンプ内粒子数
+	PRINT(pump::num);
+	if(pump::num > GHOST_BUF) throw std::runtime_error("pump::num error");
+	{
+		sksat::math::vector<Float> zero;
+		zero.x = zero.y = zero.z = 0.0;
+		for(auto i=particle_number-GHOST_BUF;i<particle_number;i++){
+			type[i] = GHOST;
+			pos[i] = zero;
+			vel[i] = zero;
+			acc[i] = zero;
+			press[i] = 0.0;
+		}
+	}
+	pump::num_once = 0;
+	for(Float x=min.x;x<rw::r_out;x+=pcl_dst){
+		for(Float z=min.z;z<max.z;z+=pcl_dst){
+			Float y=0.0;
+			sksat::math::vector<Float> p(x,y,z);
+			if(is_in_tube(p))
+				pump::num_once++;
+		}
+	}
+
+	{
+		auto tmp = (pump::capacity/particle::v)/static_cast<Float>(pump::num_once); // 毎秒ごとの放出回数
+		pump::times = static_cast<int>(1.0 / (tmp * dt));
+	}
+
+	PRINT(pump::num_once);
+	PRINT(pump::times);
+
 	lmd	= lmd / n0;
 	A1 = 2.0 * knm_vsc * static_cast<Float>(dim) / (n0 * lmd);
 	A2 = sound_vel * sound_vel / n0;
@@ -292,7 +351,7 @@ void simulation::main_loop(){
 		if(dt < (0.2 * pcl_dst / max_vel)){}
 		else{
 			std::cout<<"max-vel="<<max_vel<<std::endl;
-//			throw std::runtime_error("dt is not ok.");
+			throw std::runtime_error("dt is not ok.");
 //			dt = dt/2;
 //			output_interval*=2;
 		}
@@ -304,6 +363,8 @@ void simulation::main_loop(){
 		make_press();
 
 		move_body();
+
+		do_pump();
 
 		time_step++;
 		time += dt;
@@ -390,15 +451,19 @@ void simulation::calc_tmpacc(){
 		}
 		acc[i] = Acc * A1;
 //		acc[i].y += -9.8;
-		if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.05) acc[i].y += 0.1;
+	//	if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.05) acc[i].y += 0.1;
 	}
 }
 
 bool simulation::check_overflow(size_t i){
+	if(std::isnan(pos[i].x) || std::isnan(pos[i].y) || std::isnan(pos[i].z)) throw std::runtime_error("nan");
+	auto r2 = pos[i].x*pos[i].x + pos[i].y*pos[i].y;
 	if(
 		pos[i].x > max.x || pos[i].x < min.x ||
 		pos[i].y > max.y || pos[i].y < min.y ||
-		pos[i].z > max.z || pos[i].z < min.z
+		pos[i].z > max.z || pos[i].z < min.z ||
+		r2 < rw::r_in*rw::r_in*0.25
+//		rw::r_out*rw::r_out < r2
 	  ){
 		std::cout<<"over"<<std::endl;
 		type[i] = GHOST;
@@ -499,10 +564,10 @@ void simulation::make_press(){
 		}
 		Float mi = dens[type[i]];
 		Float pressure = (ni > n0) * (ni - n0) * A2 * mi;
-		if(type[i] == FLUID){
-			if(pos[i].x > 0.0 && 0.0 < pos[i].y && pos[i].y < 0.05) pressure += 0.1;
-			if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.0) pressure -= 0.1;
-		}
+//		if(type[i] == FLUID){
+//			if(pos[i].x > 0.0 && 0.0 < pos[i].y && pos[i].y < 0.05) pressure += 0.2;
+//			if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.0) pressure -= 0.2;
+//		}
 		press[i] = pressure;
 //		if(pressure != 0.0) PRINT(pressure);
 	}
@@ -593,10 +658,61 @@ void simulation::move_body(){
 		auto y = (pos[i].x * s) + (pos[i].y * c);
 		pos[i].x = x;
 		pos[i].y = y;
-		check_overflow(i);
+//		check_overflow(i);
 	}
 	rw::theta += dtheta;
 //	std::cout<<"theta: "<<rw::theta<<std::endl;
+}
+
+int get_particle(){
+	using namespace simulation;
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] == GHOST)
+			return i;
+	}
+	return -1;
+}
+
+void simulation::do_pump(){
+	static int call_num = -1;
+	call_num++;
+	for(auto i=0;i<particle_number;i++){
+		if(type[i] != FLUID) continue;
+		if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.01){
+			type[i] = GHOST;
+			pump::num++;
+		}
+	}
+
+	if(call_num % pump::times == 0){}
+	else return;
+
+	std::cout<<"pump"<<std::endl;
+
+	Float y = 0.0 + pcl_dst*0.1;
+	sksat::math::vector<Float> v,a;
+	v.x = 0.0;
+	v.y = 1.0;
+	v.z = 0.0;
+	a.x = 0.0;
+	a.y = 0.1;
+	a.z = 0.0;
+	Float Press = 10.0;
+	for(Float x=rw::r_in;x<rw::r_out;x+=pcl_dst){
+                for(Float z=min.z;z<max.z;z+=pcl_dst){
+			if(pump::num < 0) break;
+                        sksat::math::vector<Float> p(x,y,z);
+                        if(!is_in_tube(p)) continue;
+                        int n = get_particle();
+			if(n == -1) break;
+			type[n] = FLUID;
+			pos[n] = p;
+			vel[n] = v;
+			acc[n] = a;
+			press[n] = Press;
+			pump::num--;
+                }
+        }
 }
 
 void simulation::write_file(const size_t &step, const Float &time){
@@ -619,6 +735,9 @@ void simulation::write_file(const size_t &step, const Float &time){
 
 	for(auto i=0;i<particle_number;i++){
 		if(type[i] == GHOST) continue;
+//		if(type[i] != FLUID) continue;
+		if(type[i] == WALL)
+			if(pos[i].z != 0.0) continue;
 		f << type[i] << " "
 			<< pos[i].x << " "
 			<< pos[i].y << " "

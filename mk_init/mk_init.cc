@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <cmath>
 #include "../common.hpp"
 
 const char fname[] = "init.prof";
@@ -28,22 +29,24 @@ void error(){
 
 void write_data(){
 	using namespace rw;
+	using namespace pump;
 	using std::endl;
 	std::ofstream f(fname);
 	f << 0 << " " << 0.0 << endl
 		<< dim << endl
 		<< r_in << " " << rw::r_out << endl
-		<< theta <<" "<<rw::w<<endl;
+		<< theta << " " << rw::w << endl
+		<< capacity << " " << v << endl;
 
 	auto width = r_out - r_in;
 	auto xmax = r_out+width;
 	auto ymax = r_out+width;
-	auto zmax = 3.0;
+	auto zmax = width*2;
 	auto dx = xmax / NUM_PER_DST;
 	auto dy = ymax / NUM_PER_DST;
-	auto dz = 1.0;
+	auto dz = dx;//zmax / NUM_PER_DST;
 
-	std::cout<<"dx: "<<dx<<" dy: "<<dy<<"dz: "<<dz<<std::endl;
+	std::cout<<"dx: "<<dx<<" dy: "<<dy<<"dz: "<<dz<<endl;
 
 	std::vector<Particle> v;
 
@@ -51,10 +54,10 @@ void write_data(){
 		for(auto y = -1*ymax;y<=ymax;y+=dy){
 			for(auto x=-1*xmax;x<=xmax;x+=dx){
 				Particle p;
-				if(z != 0.0){
-					p.type = WALL;
-					continue;
-				}
+//				if(z != 0.0){
+//					p.type = WALL;
+//					continue;
+//				}
 				auto r2 = x*x + y*y;
 				if(r2 > r_out*r_out){
 					if(r2 > (r_out+width)*(r_out+width))
@@ -62,7 +65,13 @@ void write_data(){
 					else
 						p.type = WALL;
 				}else if(r2 > (r_in)*(r_in)){
-					p.type = FLUID;
+					auto r_tube = width/2;
+					auto r_xy = sqrt(r2) - (r_in+r_tube);
+					auto r2_z = r_xy*r_xy + z*z;
+					if(r2_z < r_tube*r_tube)
+						p.type = FLUID;
+					else
+						p.type = WALL;
 				}else if(width >= r_in){
 					p.type = WALL;
 				}else{
@@ -99,19 +108,26 @@ void write_data(){
 
 int main(int argc, char **argv){
 	using namespace rw;
+	using namespace pump;
 
 	std::cout<<"make init situation."<<std::endl;
 
 	ask("次元", dim);
 	if(dim != 2 && dim != 3)
 		error();
-	ask("内半径", r_in);
-	ask("外半径", r_out);
+	ask("内半径(cm)", r_in);
+	ask("外半径(cm)", r_out);
+	r_in  = r_in / 100;
+	r_out = r_out/ 100;
 	if(r_in < 0.0 || r_out < 0.0)
 		error();
 	if(r_in >= r_out)
 		error();
-	ask("角速度", w);
+	ask("角速度(rad/sec)", w);
+	ask("揚水量(L/min)", capacity);
+	capacity = capacity * 0.001 / 60;
+	ask("ポンプ体積(L)", pump::v);
+	v = v * 0.001;
 
 	write_data();
 

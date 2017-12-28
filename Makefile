@@ -33,9 +33,10 @@ gifup:$(GIF)
 	./upload.py $(GIF)
 
 autorun:
+	rm -f log.txt
+	rm -f $(GIF)
 	make run > log.txt
 	./upload.py log.txt
-	rm log.txt
 	make gifup
 
 clean:

@@ -3,7 +3,8 @@ set term gif animate
 set output "out/out.gif"
 set xrange[-0.2:0.2]
 set yrange[-0.2:0.2]
+set zrange[-0.15:0.15]
 n0 = 0
 n1 = int(system("find out -type f -name \"[^.]*\" | wc -l"))-1
-dn = 5
+dn = 1
 load "plot.plt"
