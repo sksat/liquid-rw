@@ -7,7 +7,6 @@
 #include <iomanip>
 #include <chrono>
 #include <cmath>
-#include <sksat/math/vector.hpp>
 #include "common.hpp"
 
 #define OMP_CHUNK_NUM	64
@@ -17,10 +16,7 @@
 #define GHOST_BUF	10000
 
 namespace simulation {
-	size_t time_step = 0;
-	Float time=.0;
 	Float dt=0.00005, finish_time=60.0;
-	size_t dim=3;
 	const size_t progress_interval = 1000;
 	size_t output_interval = 1000;
 
@@ -35,10 +31,9 @@ namespace simulation {
 	const Float col		= 1.0 + col_rat;
 	const Float sound_vel	= 22.0;		// 流体の音速(?)
 
-	size_t particle_number=0;
-	std::vector< sksat::math::vector<Float> > acc, vel, pos;
-	std::vector<Float> press;
-	std::vector<int> type;
+//	std::vector< sksat::math::vector<Float> > acc, vel, pos;
+//	std::vector<Float> press;
+//	std::vector<int> type;
 	sksat::math::vector<Float> min, max;
 
 	Float r, r2;			// 影響半径
@@ -50,10 +45,6 @@ namespace simulation {
 	Float dens[NUM_TYPE];		// 粒子種類ごとの密度
 	Float dens_inv[NUM_TYPE];
 	Float rlim, rlim2;		// これ以上の粒子間の接近を許さない距離
-
-	namespace particle {
-		Float v;
-	}
 
 	namespace bucket {
 		Float width, width2, width_inv;
@@ -95,7 +86,6 @@ namespace simulation {
 	void move_body();
 	void do_pump();
 
-	void load_file(const std::string &fname);
 	void alloc_bucket();
 	void set_param();
 	void write_file(const size_t &step, const Float &time);
@@ -107,17 +97,18 @@ int usage(const char *s){
 }
 
 int main(int argc, char **argv){
+	using namespace simulation;
 	if(argc != 2)
 		return usage(argv[0]);
 
-	simulation::load_file(argv[1]);
-	simulation::alloc_bucket();
-	simulation::set_param();
+	load_file(argv[1], GHOST_BUF, true);
+	alloc_bucket();
+	set_param();
 
 	std::cout<<" *** START SIMULATION *** "<<std::endl;
 
 	auto start = std::chrono::system_clock::now();
-	simulation::main_loop();
+	main_loop();
 	auto end = std::chrono::system_clock::now();
 
 	double elapsed = std::chrono::duration_cast<std::chrono::seconds>(end-start).count(); ;
@@ -127,82 +118,17 @@ int main(int argc, char **argv){
 	return 0;
 }
 
-#define PRINT(v) {std::cout<< #v <<": "<<v<<std::endl;}
-
-void simulation::load_file(const std::string &fname){
-	std::cout<<"loading file \""<<fname<<"\"..."<<std::endl;
-	std::ifstream f(fname);
-	f >> time_step
-		>> time
-		>> dim
-		>> rw::r_in >> rw::r_out
-		>> rw::theta >> rw::w
-		>> pump::capacity
-		>> pump::v
-		>> particle_number;
-
-	PRINT(particle_number);
-	particle_number = particle_number + GHOST_BUF;
-
-	PRINT(time_step);
-	PRINT(time);
-	PRINT(dim);
-	PRINT(rw::r_in);
-	PRINT(rw::r_out);
-	PRINT(rw::theta);
-	PRINT(rw::w);
-	PRINT(pump::capacity);
-	PRINT(particle_number);
+void simulation::alloc_bucket(){
+	using namespace bucket;
 
 	pcl_dst = ((rw::r_out-rw::r_in)+rw::r_out)/static_cast<Float>(NUM_PER_DST);
 	PRINT(pcl_dst);
-
-	acc.reserve(particle_number);
-	vel.reserve(particle_number);
-	pos.reserve(particle_number);
-	press.reserve(particle_number);
-	type.reserve(particle_number);
-
-	Float pav;
-	for(auto i=0;i<particle_number;i++){
-		f >> type[i]
-			>> pos[i].x
-			>> pos[i].y
-			>> pos[i].z
-			>> vel[i].x
-			>> vel[i].y
-			>> vel[i].z
-			>> press[i]
-			>> pav;
-		if(f.fail()){
-			std::cerr<<"stop: "<<i<<std::endl;
-			for(;i<particle_number;i++)
-				type[i] = GHOST;
-//			throw std::runtime_error("");
-		}
-	}
 
 	auto tmp = rw::r_out - rw::r_in;
 	min.x = min.y = (rw::r_out + tmp) * -1.0 - pcl_dst;
 	min.z = -1.0*tmp*2;
 	max.x = max.y = (rw::r_out + tmp) + pcl_dst;
 	max.z = tmp*2;
-
-	PRINT(min.x);
-	PRINT(min.y);
-	PRINT(min.z);
-	PRINT(max.x);
-	PRINT(max.y);
-	PRINT(max.z);
-
-	for(auto i=0;i<particle_number;i++){
-		if(type[i] != FLUID) continue;
-		check_overflow(i);
-	}
-}
-
-void simulation::alloc_bucket(){
-	using namespace bucket;
 
 	r = pcl_dst * 2.1;
 	r2= r * r;
@@ -225,7 +151,7 @@ void simulation::alloc_bucket(){
 
 	bucket::first = std::make_unique<int[]>(nxyz);
 	bucket::last = std::make_unique<int[]>(nxyz);
-	bucket::next  = std::make_unique<int[]>(particle_number);
+	bucket::next  = std::make_unique<int[]>(particle::num);
 }
 
 void simulation::set_param(){
@@ -258,7 +184,7 @@ void simulation::set_param(){
 	{
 		sksat::math::vector<Float> zero;
 		zero.x = zero.y = zero.z = 0.0;
-		for(auto i=particle_number-GHOST_BUF;i<particle_number;i++){
+		for(auto i=particle::num-GHOST_BUF;i<particle::num;i++){
 			type[i] = GHOST;
 			pos[i] = zero;
 			vel[i] = zero;
@@ -327,12 +253,12 @@ void simulation::main_loop(){
 		calc_tmpacc();
 		Float max_vel = 0.0;
 #ifdef CHECK_DT
-		for(auto i=0;i<particle_number;i++){
+		for(auto i=0;i<particle::num;i++){
 			if(type[i] != FLUID) continue;
 			auto v = vel[i].x*vel[i].x + vel[i].y*vel[i].y;
 			if(max_vel < v) max_vel = v;
 #ifdef CHECK_SAME_POS
-			for(auto j=0;j<particle_number;j++){
+			for(auto j=0;j<particle::num;j++){
 				if(i == j) continue;
 				if(type[i] != FLUID) continue;
 				if(pos[i].x == pos[j].x && pos[i].y == pos[j].y && pos[i].z == pos[j].z){
@@ -373,7 +299,7 @@ void simulation::main_loop(){
 				<< std::setw(2) << static_cast<int>((time/finish_time)*100) << "% "
 				<< "time step: " << std::setw(10) << time_step << "  "
 				<< "time: " << std::setw(10) << time << "  "
-				<< "particle number: " << particle_number
+				<< "particle number: " << particle::num
 				<< std::endl;
 		}
 
@@ -387,8 +313,8 @@ void simulation::main_loop(){
 void simulation::make_bucket(){
 	using namespace bucket;
 	for(int i=0;i<nxyz;i++){ first[i] = -1; last[i] = -1; }
-	for(int i=0;i<particle_number;i++){ next[i] = -1; }
-	for(int i=0;i<particle_number;i++){
+	for(int i=0;i<particle::num;i++){ next[i] = -1; }
+	for(int i=0;i<particle::num;i++){
 		if(type[i] == GHOST) continue;
 		int ix = static_cast<int>((pos[i].x - min.x) * width_inv) + 1;
 		int iy = static_cast<int>((pos[i].y - min.y) * width_inv) + 1;
@@ -403,7 +329,7 @@ void simulation::make_bucket(){
 
 void simulation::calc_tmpacc(){
 #pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
 		Acc.x = Acc.y = Acc.z = 0.0;
@@ -475,7 +401,7 @@ bool simulation::check_overflow(size_t i){
 
 void simulation::move_particle_tmp(){
 #pragma omp parallel for
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] != FLUID) continue;
 		vel[i] += acc[i] * dt;
 		pos[i] += vel[i] * dt;
@@ -487,7 +413,7 @@ void simulation::move_particle_tmp(){
 
 void simulation::check_collision(){
 #pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] != FLUID) continue;
 		Float mi = dens[type[i]];
 		auto vec_i = vel[i], vec_i2 = vel[i];
@@ -525,14 +451,14 @@ void simulation::check_collision(){
 		}
 		acc[i] = vec_i2;
 	}
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		vel[i] = acc[i];
 	}
 }
 
 void simulation::make_press(){
 #pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] == GHOST) continue;
 		Float ni = 0.0;
 		int ix = static_cast<int>((pos[i].x - min.x)*bucket::width_inv) + 1;
@@ -575,7 +501,7 @@ void simulation::make_press(){
 
 void simulation::calc_press_grad(){
 #pragma omp parallel for schedule(dynamic,OMP_CHUNK_NUM)
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] != FLUID) continue;
 		sksat::math::vector<Float> Acc;
 		Acc.x = Acc.y = Acc.z = 0.0;
@@ -638,7 +564,7 @@ void simulation::calc_press_grad(){
 
 void simulation::move_particle(){
 #pragma omp parallel for
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] != FLUID) continue;
 		vel[i] += acc[i] * dt;
 		pos[i] += acc[i] * dt * dt;
@@ -650,7 +576,7 @@ void simulation::move_particle(){
 
 void simulation::move_body(){
 	auto dtheta = rw::w*dt;
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] != WALL) continue;
 		auto s = sin(dtheta);
 		auto c = cos(dtheta);
@@ -666,7 +592,7 @@ void simulation::move_body(){
 
 int get_particle(){
 	using namespace simulation;
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] == GHOST)
 			return i;
 	}
@@ -676,7 +602,7 @@ int get_particle(){
 void simulation::do_pump(){
 	static int call_num = -1;
 	call_num++;
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] != FLUID) continue;
 		if(pos[i].x > 0.0 && -0.05 < pos[i].y && pos[i].y < 0.01){
 			type[i] = GHOST;
@@ -729,15 +655,15 @@ void simulation::write_file(const size_t &step, const Float &time){
 
 	f << time_step << endl
 		<< time << endl
-		<< particle_number << endl
+		<< particle::num << endl
 		<< rw::r_in << " " << rw::r_out << endl
 		<< rw::theta << " " << rw::w << endl;
 
-	for(auto i=0;i<particle_number;i++){
+	for(auto i=0;i<particle::num;i++){
 		if(type[i] == GHOST) continue;
 //		if(type[i] != FLUID) continue;
-		if(type[i] == WALL)
-			if(pos[i].z != 0.0) continue;
+//		if(type[i] == WALL)
+//			if(pos[i].z != 0.0) continue;
 		f << type[i] << " "
 			<< pos[i].x << " "
 			<< pos[i].y << " "
